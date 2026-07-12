@@ -1,3 +1,14 @@
+# Pipeline run artifacts (transcripts, downloaded video, cut clips)
+output/
+
+# Media
+*.mp4
+*.mkv
+*.webm
+*.m4a
+*.json3
+*.vtt
+
 __pycache__/
 *.pyc
 .venv/

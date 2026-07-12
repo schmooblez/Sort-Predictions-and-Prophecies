@@ -1,38 +1,49 @@
 # Sort Predictions and Prophecies
 
-A small pipeline that takes a YouTube video, pulls the transcript, and **sorts
-every forward-looking statement into two buckets**:
+Automated pipeline for analyzing YouTube videos of psychic predictions / prophecies.
+Give it a YouTube URL and it extracts every **concrete, falsifiable, dated** prediction,
+cuts a clip for each, stores the clips in Google Drive, and files a structured record per
+prediction in Airtable — ready to sort, review, and choose which to feature, highlight,
+or respond to.
 
-- **Prediction** — the speaker's *own* forecast (reasoned, intuitive, or psychic).
-- **Prophecy** — a claim the speaker *attributes to an external source*: a named
-  seer (Nostradamus, Baba Vanga), an oracle, scripture, or tradition.
+## How to run it
 
-## Pipeline stages
+In a Claude Code session pointed at this repo (with YouTube network access enabled), just
+paste a YouTube URL and ask to run the prophecy pipeline — for example:
 
-1. **Fetch** — transcript via `youtube_transcript_api`.
-2. **Extract** — an LLM pulls out each distinct forward-looking statement.
-3. **Sort** — each statement is classified as *prediction* vs *prophecy*, with a
-   subject tag, timeframe, and testability flag.
-4. **Report** — writes `results.json` and a human-readable `report.md`.
+> run the prophecy pipeline on https://www.youtube.com/watch?v=VIDEO_ID
 
-## Usage
+Claude follows the **`prophecy-pipeline`** skill (`.claude/skills/prophecy-pipeline/SKILL.md`),
+which is the source of truth for the whole workflow and holds every concrete detail
+(Airtable base/field IDs, the Drive folder ID, extraction criteria, category taxonomy,
+and the specificity-rating rubric).
+
+## What happens
+
+1. **Transcript** — `scripts/fetch_transcript.py` pulls a timestamped transcript with
+   `yt-dlp`. No API key; if a video has no English captions, it's skipped.
+2. **Analysis** — Claude reads the transcript and extracts only concrete, falsifiable,
+   dated predictions (vague or undated statements are excluded).
+3. **Clips** — `scripts/cut_clip.py` downloads the video once and cuts each clip with ffmpeg.
+4. **Storage** — clips upload to the Google Drive folder "Prophecies and Predictions".
+5. **Database** — one Airtable record per prediction in the "Clips" table, with summary,
+   dates, categories, location, specificity rating, links, and review status.
+
+## Setup
 
 ```bash
 pip install -r requirements.txt
-export ANTHROPIC_API_KEY=sk-...      # step 2+3 use the Anthropic API
-python pipeline.py "https://www.youtube.com/watch?v=VIDEO_ID"
+apt-get update && apt-get install -y ffmpeg    # if ffmpeg is not already present
 ```
 
-Without `ANTHROPIC_API_KEY` the pipeline still fetches and saves the transcript
-and writes `extraction_prompt.txt`, so the sort can be finished in any LLM
-context. Output lands in `output/<video_id>/`.
+Requires: a session allowed to reach `youtube.com` / `googlevideo.com` / `ytimg.com`, and
+the Airtable + Google Drive connectors enabled.
 
-## Example run
+## Notes
 
-`output/ELPYVE3om9w/` holds a completed run on a Dec-2019 Craig Hamilton-Parker
-video about Donald Trump — **17 predictions** and **6 prophecies** (Nostradamus,
-Baba Vanga, ancient Tamil Oracles). See [`report.md`](output/ELPYVE3om9w/report.md).
-Outcomes in that run were scored by hand against real-world events as of
-2026-07-12 (the `outcome_status` / `outcome_note` fields); the base pipeline
-produces the prediction/prophecy sort, and outcome-scoring is an optional
-enrichment layer on top.
+- **No YouTube API key** is used — `yt-dlp` works anonymously and is fully decoupled from
+  any channel's API key or Google account.
+- Downloading third-party video crosses YouTube's Terms of Service; the short-clip,
+  commentary/criticism use is a fair-use posture. Use accordingly.
+- The scripts only handle mechanical transcript/clip I/O; the judgment (which predictions
+  qualify, their categories and ratings) is done by Claude per the skill.
