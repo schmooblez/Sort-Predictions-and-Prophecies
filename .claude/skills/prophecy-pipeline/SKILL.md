@@ -18,16 +18,20 @@ finds each **concrete, falsifiable, dated** prediction, cuts the relevant clip, 
 it in Google Drive, and files a structured row in Airtable so the user can sort,
 review, and choose which to feature/highlight/respond to.
 
+This skill is **self-contained**: it writes its own helper script and needs nothing but
+`yt-dlp` + `ffmpeg` installed. It does not depend on any repository being present.
+
 ## What "run the pipeline" means
 
 Given a YouTube URL, do all of this end to end:
 
-1. **Fetch** the timestamped transcript + metadata (`scripts/fetch_transcript.py`).
-2. **Analyze** the transcript and extract every qualifying prediction (see criteria).
-3. **Clip** the relevant span of the video for each prediction (`scripts/cut_clip.py`).
-4. **Upload** each clip to the Google Drive folder.
-5. **File** one Airtable record per prediction in the "Clips" table.
-6. **Report** back a short table of what was filed.
+1. **Setup** — install tools + write the helper (once per session).
+2. **Fetch** the timestamped transcript + metadata.
+3. **Analyze** the transcript and extract every qualifying prediction (see criteria).
+4. **Clip** the relevant span of the video for each prediction.
+5. **Upload** each clip to the Google Drive folder.
+6. **File** one Airtable record per prediction in the "Clips" table.
+7. **Report** back a short table of what was filed.
 
 If the video has **no English transcript**, stop and tell the user "No transcript
 available — skipping this video." (Do not attempt Whisper; that was intentionally
@@ -39,24 +43,155 @@ descoped.)
   and `ytimg.com`. If yt-dlp fails with a proxy `403 CONNECT`/policy denial, the
   environment's network policy is blocking YouTube — tell the user it needs to allow
   those domains (Claude Code on the web → environment settings → network access) and stop.
+- **Code execution:** this runs in **Claude Code** (needs a shell for yt-dlp/ffmpeg and
+  file writes). It cannot fully run in plain claude.ai chat.
+- **Connectors:** the Airtable and Google Drive MCP connectors must be enabled.
 - **No API key needed.** `yt-dlp` scrapes anonymously; it never touches the user's
   YouTube Data API key or Google account. Do not ask for or use a YouTube API key.
-- **Tools:** `yt-dlp` (pip) and `ffmpeg` (system). Install if missing:
-  `pip install -r requirements.txt` and `apt-get update && apt-get install -y ffmpeg`.
+
+## Step 0 — Setup (once per session)
+
+Install the tools and write the self-contained helper to `/tmp/prophecy-pipeline`.
+Run this whole block in the shell:
+
+```bash
+pip install -q yt-dlp 2>/dev/null || pip install -q --break-system-packages yt-dlp
+command -v ffmpeg >/dev/null || { apt-get update -qq && apt-get install -y -qq ffmpeg; }
+mkdir -p /tmp/prophecy-pipeline
+cat > /tmp/prophecy-pipeline/prophecy_tools.py <<'PYEOF'
+#!/usr/bin/env python3
+"""Self-contained helpers for the prophecy pipeline (yt-dlp + ffmpeg, no API key).
+
+  transcript <url>                     -> metadata.json, transcript.json, transcript.txt
+  clip <url_or_id> <start> <end> <slug> -> cuts a clip, prints its path
+
+Output goes under /tmp/prophecy-pipeline/output/<video_id>/ by default.
+start/end accept SS, MM:SS, or H:MM:SS. Exit 2 = NO_TRANSCRIPT (skip the video).
+"""
+import argparse, glob, json, os, re, subprocess, sys
+
+DEFAULT_OUT = "/tmp/prophecy-pipeline/output"
+
+
+def run(cmd, capture=False):
+    return subprocess.run(cmd, capture_output=capture, text=True)
+
+
+def hms(sec):
+    sec = int(sec); h, r = divmod(sec, 3600); m, s = divmod(r, 60)
+    return f"{h}:{m:02d}:{s:02d}"
+
+
+def to_seconds(t):
+    t = str(t).strip()
+    if re.fullmatch(r"\d+(\.\d+)?", t):
+        return float(t)
+    parts = [float(p) for p in t.split(":")]
+    while len(parts) < 3:
+        parts.insert(0, 0.0)
+    h, m, s = parts
+    return h * 3600 + m * 60 + s
+
+
+def video_id(s):
+    if "v=" in s:
+        return s.split("v=")[-1].split("&")[0]
+    return s.rstrip("/").split("/")[-1].split("?")[0]
+
+
+def cmd_transcript(a):
+    r = run(["yt-dlp", "-J", "--skip-download", a.url], capture=True)
+    if r.returncode != 0:
+        sys.stderr.write(r.stderr or "metadata fetch failed\n"); sys.exit(1)
+    info = json.loads(r.stdout)
+    vid = info["id"]; d = os.path.join(a.outdir, vid); os.makedirs(d, exist_ok=True)
+    meta = {"id": vid, "title": info.get("title"),
+            "channel": info.get("channel") or info.get("uploader"),
+            "uploader": info.get("uploader"), "upload_date": info.get("upload_date"),
+            "duration": info.get("duration"), "webpage_url": info.get("webpage_url"),
+            "description": info.get("description")}
+    json.dump(meta, open(os.path.join(d, "metadata.json"), "w"), indent=2)
+
+    subs = info.get("subtitles") or {}
+    have_manual = any(k.startswith("en") for k in subs)
+    base = ["yt-dlp", "--skip-download", "--sub-langs", "en.*,en",
+            "--sub-format", "json3", "-o", os.path.join(d, "%(id)s"), a.url]
+    run(base + (["--write-subs"] if have_manual else ["--write-auto-subs"]))
+    files = sorted(glob.glob(os.path.join(d, f"{vid}*.json3")))
+    if not files:
+        run(base + ["--write-auto-subs"])
+        files = sorted(glob.glob(os.path.join(d, f"{vid}*.json3")))
+    if not files:
+        sys.stderr.write(f"NO_TRANSCRIPT: no English captions for {vid}\n"); sys.exit(2)
+
+    j3 = json.load(open(files[0]))
+    segs = []; last = None
+    for ev in j3.get("events", []):
+        if "segs" not in ev:
+            continue
+        text = "".join(s.get("utf8", "") for s in ev["segs"]).strip()
+        if not text or text == last:
+            continue
+        last = text
+        segs.append({"start": round(ev.get("tStartMs", 0) / 1000.0, 2),
+                     "dur": round(ev.get("dDurationMs", 0) / 1000.0, 2), "text": text})
+    json.dump(segs, open(os.path.join(d, "transcript.json"), "w"), indent=2)
+    with open(os.path.join(d, "transcript.txt"), "w") as f:
+        for s in segs:
+            f.write(f"[{hms(s['start'])}] {s['text']}\n")
+    print(f"OK {vid}: {len(segs)} segments | {meta['title']!r} | {meta['channel']}")
+    print(f"  dir: {d}")
+
+
+def cmd_clip(a):
+    vid = video_id(a.video)
+    url = a.video if a.video.startswith("http") else f"https://www.youtube.com/watch?v={vid}"
+    d = os.path.join(a.outdir, vid); os.makedirs(os.path.join(d, "clips"), exist_ok=True)
+    source = os.path.join(d, "source.mp4")
+    if not os.path.exists(source):
+        r = run(["yt-dlp", "-f", "bv*[height<=720]+ba/b[height<=720]/best",
+                 "--merge-output-format", "mp4", "-o", source, url])
+        if r.returncode != 0 or not os.path.exists(source):
+            sys.stderr.write("DOWNLOAD_FAILED\n"); sys.exit(1)
+    start = to_seconds(a.start); dur = max(0.1, to_seconds(a.end) - start)
+    out = os.path.join(d, "clips", f"{a.slug}.mp4")
+    r = run(["ffmpeg", "-y", "-ss", str(start), "-i", source, "-t", str(dur),
+             "-c:v", "libx264", "-preset", "veryfast", "-c:a", "aac",
+             "-movflags", "+faststart", out])
+    if r.returncode != 0 or not os.path.exists(out):
+        sys.stderr.write("CUT_FAILED\n"); sys.exit(1)
+    print(out)
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    t = sub.add_parser("transcript"); t.add_argument("url")
+    t.add_argument("--outdir", default=DEFAULT_OUT); t.set_defaults(fn=cmd_transcript)
+    c = sub.add_parser("clip"); c.add_argument("video"); c.add_argument("start")
+    c.add_argument("end"); c.add_argument("slug")
+    c.add_argument("--outdir", default=DEFAULT_OUT); c.set_defaults(fn=cmd_clip)
+    a = ap.parse_args(); a.fn(a)
+
+
+if __name__ == "__main__":
+    main()
+PYEOF
+echo "helper ready at /tmp/prophecy-pipeline/prophecy_tools.py"
+```
 
 ## Step 1 — Fetch transcript + metadata
 
 ```bash
-pip install -q -r requirements.txt          # yt-dlp
-python scripts/fetch_transcript.py "<YOUTUBE_URL>"
+python /tmp/prophecy-pipeline/prophecy_tools.py transcript "<YOUTUBE_URL>"
 ```
 
-Writes to `output/<video_id>/`:
+Writes to `/tmp/prophecy-pipeline/output/<video_id>/`:
 - `metadata.json` — id, title, channel, upload_date (YYYYMMDD), duration, webpage_url
 - `transcript.json` — list of `{start, dur, text}` (seconds)
 - `transcript.txt` — readable, each line prefixed `[H:MM:SS]`
 
-If the script exits with `NO_TRANSCRIPT`, stop per the rule above.
+If it exits with `NO_TRANSCRIPT`, stop per the rule above.
 Read `metadata.json` and `transcript.txt` before analyzing.
 
 ## Step 2 — Extract qualifying predictions
@@ -129,11 +264,11 @@ tell the user — do not silently drop a good tag.
 The source video downloads once and is reused for all clips.
 
 ```bash
-python scripts/cut_clip.py "<YOUTUBE_URL>" <start> <end> <slug>
+python /tmp/prophecy-pipeline/prophecy_tools.py clip "<YOUTUBE_URL>" <start> <end> <slug>
 # start/end accept SS, MM:SS, or H:MM:SS. <slug> is a short filename, e.g. cosby-prison-2026
 ```
 
-Prints the path `output/<video_id>/clips/<slug>.mp4`.
+Prints the path `/tmp/prophecy-pipeline/output/<video_id>/clips/<slug>.mp4`.
 
 ## Step 4 — Upload each clip to Google Drive
 
@@ -191,3 +326,4 @@ Drive link, plus a count and any predictions you deliberately excluded as too va
 ## Constants (quick reference)
 - Airtable base: `appqabrvANN8bXH9E` · table `tblFh1XHCxSoYyhOR`
 - Drive folder: `1oleB7GOgT4oYhiKfzbGpt8r64-7b111X` ("Prophecies and Predictions")
+- Working dir: `/tmp/prophecy-pipeline` (helper + output)
