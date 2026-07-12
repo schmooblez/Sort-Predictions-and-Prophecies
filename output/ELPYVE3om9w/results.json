@@ -1,0 +1,263 @@
+{
+  "video_id": "ELPYVE3om9w",
+  "url": "https://www.youtube.com/watch?v=ELPYVE3om9w",
+  "speaker": "Craig Hamilton-Parker (psychic / medium)",
+  "context": "Pre-Christmas 2019 video about Donald Trump. Mixes the speaker's own forecasts with prophecies he attributes to Nostradamus, Baba Vanga, and ancient Tamil 'Indian Oracles'.",
+  "scored_as_of": "2026-07-12",
+  "scoring_note": "Outcomes reflect real-world events through mid-2026. 'hit/miss/partial' are best-effort judgements; vague or interpretive claims are marked unverifiable.",
+  "items": [
+    {
+      "timestamp": "00:37",
+      "category": "prediction",
+      "source": "speaker",
+      "subject": "Trump impeachment",
+      "statement": "Trump will be impeached but will NOT be removed from office.",
+      "timeframe": "2019-2020",
+      "testable": true,
+      "outcome_status": "hit",
+      "outcome_note": "Impeached Dec 2019, acquitted by the Senate Feb 2020; not removed."
+    },
+    {
+      "timestamp": "01:08",
+      "category": "prediction",
+      "source": "speaker",
+      "subject": "2020 election",
+      "statement": "Trump will win the U.S. election.",
+      "timeframe": "2020",
+      "testable": true,
+      "outcome_status": "miss",
+      "outcome_note": "Trump lost the 2020 election to Joe Biden."
+    },
+    {
+      "timestamp": "01:08",
+      "category": "prediction",
+      "source": "speaker",
+      "subject": "China",
+      "statement": "There will be a political coup and popular uprising in China.",
+      "timeframe": "predicted since 2014, unspecified",
+      "testable": true,
+      "outcome_status": "miss",
+      "outcome_note": "No coup or popular uprising has occurred; the CCP remains firmly in power."
+    },
+    {
+      "timestamp": "01:24",
+      "category": "prediction",
+      "source": "speaker",
+      "subject": "Russia / Syria",
+      "statement": "Trump will challenge Putin over Syria; West-East tensions manifest in 2019.",
+      "timeframe": "2019",
+      "testable": true,
+      "outcome_status": "miss",
+      "outcome_note": "No notable 2019 Trump-Putin confrontation over Syria materialised."
+    },
+    {
+      "timestamp": "01:39",
+      "category": "prediction",
+      "source": "speaker",
+      "subject": "Middle East",
+      "statement": "There will be conflict in the Middle East, with Saudi Arabia drawn into conflict with Iran, pushed by Trump.",
+      "timeframe": "unspecified",
+      "testable": true,
+      "outcome_status": "partial",
+      "outcome_note": "Saudi-Iran tensions were real, but no open war; the two restored diplomatic ties in 2023."
+    },
+    {
+      "timestamp": "02:09",
+      "category": "prediction",
+      "source": "speaker",
+      "subject": "China",
+      "statement": "Trump's pressure will cause the implosion of the Chinese system / a revolution in China.",
+      "timeframe": "unspecified",
+      "testable": true,
+      "outcome_status": "miss",
+      "outcome_note": "No implosion or revolution occurred."
+    },
+    {
+      "timestamp": "02:09",
+      "category": "prediction",
+      "source": "speaker",
+      "subject": "Europe",
+      "statement": "Trump will 'take on Europe' next, after China.",
+      "timeframe": "unspecified",
+      "testable": false,
+      "outcome_status": "unverifiable",
+      "outcome_note": "Too vague; trade frictions with the EU existed but the claim is not scorable."
+    },
+    {
+      "timestamp": "02:25",
+      "category": "prediction",
+      "source": "speaker",
+      "subject": "Trump allies",
+      "statement": "One or two close allies (e.g. Rudy Giuliani) will stab him in the back / do him damage during the proceedings.",
+      "timeframe": "unspecified",
+      "testable": false,
+      "outcome_status": "partial",
+      "outcome_note": "Giuliani later became a major liability (indicted 2023, disbarred 2024), but not clearly during the 2019-20 proceedings as framed."
+    },
+    {
+      "timestamp": "03:14",
+      "category": "prediction",
+      "source": "speaker",
+      "subject": "Future presidency",
+      "statement": "Trump will serve a second term as president 'in the future'.",
+      "timeframe": "unspecified future",
+      "testable": true,
+      "outcome_status": "hit",
+      "outcome_note": "Ambiguous: his immediate framing was winning 2020 (missed), but as a standalone claim of a future second term it came true - Trump won 2024 and was inaugurated Jan 2025."
+    },
+    {
+      "timestamp": "03:45",
+      "category": "prediction",
+      "source": "speaker",
+      "subject": "2020 Democratic primary",
+      "statement": "The final Democratic race will be between Joe Biden and Elizabeth Warren.",
+      "timeframe": "2020",
+      "testable": true,
+      "outcome_status": "partial",
+      "outcome_note": "Biden was in the final; the last real contest was Biden vs Bernie Sanders, not Warren."
+    },
+    {
+      "timestamp": "03:58",
+      "category": "prediction",
+      "source": "speaker",
+      "subject": "2020 Democratic nominee",
+      "statement": "Elizabeth Warren will become the Democratic nominee for president.",
+      "timeframe": "coming months (2020)",
+      "testable": true,
+      "outcome_status": "miss",
+      "outcome_note": "Warren dropped out in March 2020; Biden was the nominee."
+    },
+    {
+      "timestamp": "04:46",
+      "category": "prediction",
+      "source": "speaker",
+      "subject": "Trump demeanour",
+      "statement": "After impeachment Trump will become more fiery and confident on the world stage.",
+      "timeframe": "unspecified",
+      "testable": false,
+      "outcome_status": "unverifiable",
+      "outcome_note": "Subjective / not scorable."
+    },
+    {
+      "timestamp": "05:21",
+      "category": "prediction",
+      "source": "speaker",
+      "subject": "South Korea",
+      "statement": "New problems will arise with South Korea.",
+      "timeframe": "near future",
+      "testable": false,
+      "outcome_status": "unverifiable",
+      "outcome_note": "Too vague to score."
+    },
+    {
+      "timestamp": "05:36",
+      "category": "prediction",
+      "source": "speaker",
+      "subject": "North Korea",
+      "statement": "A live North Korean missile will hit somewhere like the sea, and Trump will take a forceful stance.",
+      "timeframe": "future",
+      "testable": true,
+      "outcome_status": "miss",
+      "outcome_note": "No such live-missile escalation followed; US-NK diplomacy quietly stalled."
+    },
+    {
+      "timestamp": "06:41",
+      "category": "prediction",
+      "source": "speaker",
+      "subject": "Assassination attempt",
+      "statement": "There will be an attempt on Trump's life at some stage, but he will not die from it.",
+      "timeframe": "unspecified",
+      "testable": true,
+      "outcome_status": "hit",
+      "outcome_note": "Two 2024 assassination attempts (Butler PA, 13 Jul 2024; West Palm Beach, 15 Sep 2024); Trump survived both."
+    },
+    {
+      "timestamp": "06:57",
+      "category": "prediction",
+      "source": "speaker",
+      "subject": "Trump family",
+      "statement": "A car accident of some sort will affect other members of the Trump family.",
+      "timeframe": "unspecified",
+      "testable": true,
+      "outcome_status": "unverifiable",
+      "outcome_note": "No widely reported event matching this claim."
+    },
+    {
+      "timestamp": "09:08",
+      "category": "prediction",
+      "source": "speaker",
+      "subject": "Indian Oracle (meta)",
+      "statement": "He has located Donald Trump's ancient Tamil Oracle and will reveal its 2020+ predictions in his next video.",
+      "timeframe": "Christmas 2019 / soon",
+      "testable": false,
+      "outcome_status": "unverifiable",
+      "outcome_note": "A promise about forthcoming content rather than a world event."
+    },
+    {
+      "timestamp": "06:06",
+      "category": "prophecy",
+      "source": "Nostradamus",
+      "subject": "Trump's sanity",
+      "statement": "'The false trumpet concealing madness' - read as raising questions about Trump's sanity.",
+      "timeframe": "unspecified",
+      "testable": false,
+      "outcome_status": "unverifiable",
+      "outcome_note": "Interpretive; not scorable."
+    },
+    {
+      "timestamp": "06:24",
+      "category": "prophecy",
+      "source": "Nostradamus",
+      "subject": "Assassination",
+      "statement": "'The trumpet shakes with great discord... the bloody mouth will swim with blood... lies on the ground' - interpreted as a possible assassination attempt.",
+      "timeframe": "unspecified",
+      "testable": false,
+      "outcome_status": "partial",
+      "outcome_note": "Interpretive, but notable given the real 2024 assassination attempts on Trump."
+    },
+    {
+      "timestamp": "07:13",
+      "category": "prophecy",
+      "source": "Nostradamus / oracle tradition",
+      "subject": "Final president",
+      "statement": "The final U.S. president will be a messiah-type personality.",
+      "timeframe": "unspecified",
+      "testable": false,
+      "outcome_status": "unverifiable",
+      "outcome_note": "Interpretive; not scorable."
+    },
+    {
+      "timestamp": "07:28",
+      "category": "prophecy",
+      "source": "Nostradamus / oracle tradition",
+      "subject": "US division",
+      "statement": "Everyone will put their hopes in him and the opposite will happen - he will bring the country down, and conflict between northern and southern states will escalate.",
+      "timeframe": "unspecified",
+      "testable": false,
+      "outcome_status": "unverifiable",
+      "outcome_note": "Political division heightened, but no literal north-vs-south state conflict."
+    },
+    {
+      "timestamp": "07:46",
+      "category": "prophecy",
+      "source": "Baba Vanga",
+      "subject": "Religious war",
+      "statement": "A massive 'Muslim war' was prophesied.",
+      "timeframe": "unspecified",
+      "testable": true,
+      "outcome_status": "unverifiable",
+      "outcome_note": "No such war has occurred; the attribution itself is disputed."
+    },
+    {
+      "timestamp": "08:49",
+      "category": "prophecy",
+      "source": "Ancient Tamil 'Indian Oracles'",
+      "subject": "Trump 2020 and beyond",
+      "statement": "The ancient Tamil Oracle holds Donald Trump's predictions for 2020 and beyond (content to be revealed later).",
+      "timeframe": "2020+",
+      "testable": false,
+      "outcome_status": "pending",
+      "outcome_note": "No substantive Oracle content is delivered in this video; presented as forthcoming."
+    }
+  ]
+}
