@@ -1,0 +1,900 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>Platform Fighter Level Designer</title>
+<style>
+  :root{
+    --bg:#11151f; --panel:#1b2130; --panel2:#222a3d; --line:#313b52;
+    --ink:#e8edf7; --muted:#9aa6be; --accent:#5aa2ff; --accent2:#7cf0c8;
+    --danger:#ff6b6b; --swatch:#0e1320;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0}
+  body{
+    background:var(--bg); color:var(--ink);
+    font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+    overflow:hidden; user-select:none; -webkit-user-select:none;
+  }
+  #app{display:flex; flex-direction:column; height:100%}
+  header{
+    display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+    padding:8px 12px; background:linear-gradient(180deg,#1c2333,#151a27);
+    border-bottom:1px solid var(--line);
+  }
+  header .brand{font-weight:700; letter-spacing:.2px; margin-right:4px; white-space:nowrap}
+  header .brand small{color:var(--muted); font-weight:500}
+  .group{display:flex; align-items:center; gap:6px; background:var(--panel); border:1px solid var(--line);
+    border-radius:10px; padding:4px 6px}
+  .group label{color:var(--muted); font-size:12px; padding:0 2px}
+  input[type=text]{
+    background:var(--swatch); border:1px solid var(--line); color:var(--ink);
+    border-radius:8px; padding:6px 8px; width:150px; font:inherit;
+  }
+  button{
+    background:var(--panel2); color:var(--ink); border:1px solid var(--line);
+    border-radius:8px; padding:6px 10px; font:inherit; cursor:pointer;
+  }
+  button:hover{border-color:#48577a; background:#28324a}
+  button:active{transform:translateY(1px)}
+  button.icon{width:30px; height:30px; padding:0; font-size:16px; line-height:1; display:grid; place-items:center}
+  button.primary{background:linear-gradient(180deg,#2f6bd6,#245bbd); border-color:#2f6bd6}
+  button.primary:hover{background:linear-gradient(180deg,#3b7bee,#2b66cf)}
+  button.good{background:linear-gradient(180deg,#1f9d74,#188562); border-color:#1f9d74}
+  button.good:hover{filter:brightness(1.08)}
+  button.warn{color:#ffd7d7}
+  .dim{color:var(--muted)}
+  .sz{min-width:26px; text-align:center; font-variant-numeric:tabular-nums}
+  main{flex:1; display:flex; min-height:0}
+  #stage{
+    flex:1; position:relative; display:grid; place-items:center; min-width:0;
+    background:
+      radial-gradient(1200px 600px at 50% -10%, #223052 0%, rgba(34,48,82,0) 60%),
+      repeating-linear-gradient(0deg,#0d111a 0 24px,#0e131e 24px 48px);
+    overflow:hidden;
+  }
+  #wrap{position:relative; box-shadow:0 12px 40px rgba(0,0,0,.5); border-radius:6px; overflow:hidden}
+  canvas{display:block; touch-action:none}
+  #hud{position:absolute; left:12px; bottom:12px; background:rgba(10,14,22,.72);
+    border:1px solid var(--line); border-radius:10px; padding:8px 10px; color:var(--muted);
+    font-size:12px; pointer-events:none; max-width:60%}
+  #hud b{color:var(--ink)}
+  aside{
+    width:210px; flex:0 0 210px; background:var(--panel); border-left:1px solid var(--line);
+    display:flex; flex-direction:column; min-height:0;
+  }
+  aside .title{padding:10px 12px 4px; font-size:12px; text-transform:uppercase; letter-spacing:.08em; color:var(--muted)}
+  #palette{padding:8px 10px; display:grid; grid-template-columns:1fr 1fr; gap:8px; overflow:auto}
+  .tile{
+    background:var(--swatch); border:1px solid var(--line); border-radius:10px; padding:6px;
+    display:flex; flex-direction:column; align-items:center; gap:4px; cursor:pointer; position:relative;
+  }
+  .tile canvas{border-radius:6px; background:#0a0f18}
+  .tile span{font-size:11px; color:var(--muted); text-align:center; line-height:1.15}
+  .tile.sel{border-color:var(--accent); box-shadow:0 0 0 2px rgba(90,162,255,.35) inset}
+  .tile.sel span{color:var(--ink)}
+  .tile .key{position:absolute; top:4px; right:6px; font-size:10px; color:#5c6a86}
+  aside .foot{margin-top:auto; padding:10px 12px; border-top:1px solid var(--line); color:var(--muted); font-size:12px}
+  aside .foot kbd{background:#0c111c; border:1px solid var(--line); border-bottom-width:2px; border-radius:5px;
+    padding:1px 5px; font:inherit; font-size:11px; color:var(--ink)}
+  .row{display:flex; gap:6px; align-items:center}
+  .spacer{flex:1}
+  .playing #palette{opacity:.35; pointer-events:none}
+  .badge{font-size:11px; padding:2px 8px; border-radius:999px; border:1px solid var(--line); color:var(--muted)}
+  .badge.on{color:#0c1220; background:var(--accent2); border-color:var(--accent2); font-weight:700}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="brand">🎮 Level Designer <small>· platform fighter</small></div>
+
+    <div class="group">
+      <label>Name</label>
+      <input id="name" type="text" value="my-arena" spellcheck="false" />
+    </div>
+
+    <div class="group">
+      <label>Width</label>
+      <button class="icon" id="wMinus" title="Narrower">−</button>
+      <span class="sz" id="wVal">0</span>
+      <button class="icon" id="wPlus" title="Wider">＋</button>
+    </div>
+    <div class="group">
+      <label>Height</label>
+      <button class="icon" id="hMinus" title="Shorter">−</button>
+      <span class="sz" id="hVal">0</span>
+      <button class="icon" id="hPlus" title="Taller">＋</button>
+    </div>
+
+    <div class="spacer"></div>
+
+    <span class="badge" id="modeBadge">Editing</span>
+    <button id="playBtn" class="good">▶ Playtest</button>
+    <button id="clearBtn" class="warn">Clear</button>
+    <button id="importBtn">Import…</button>
+    <button id="pngBtn" class="primary">⬇ Image</button>
+    <button id="htmlBtn" class="primary">⬇ HTML</button>
+    <input id="fileIn" type="file" accept=".json,.html,text/html,application/json" style="display:none" />
+  </header>
+
+  <main>
+    <div id="stage">
+      <div id="wrap"><canvas id="c"></canvas></div>
+      <div id="hud">
+        <div><b id="hudTool">Ground</b> selected · left-drag to paint, right-drag to erase</div>
+        <div class="dim" id="hudPlay" style="display:none"></div>
+      </div>
+    </div>
+    <aside>
+      <div class="title">Blocks</div>
+      <div id="palette"></div>
+      <div class="foot">
+        <div class="row" style="margin-bottom:6px">
+          <span class="badge" id="gridBadge">Grid ✓</span>
+          <span class="spacer"></span>
+          <button id="gridBtn" class="icon" title="Toggle grid">#</button>
+        </div>
+        Keys <kbd>1</kbd>–<kbd>6</kbd> blocks · <kbd>E</kbd> erase · <kbd>P</kbd> play<br>
+        In play: <kbd>←</kbd><kbd>→</kbd>/<kbd>A</kbd><kbd>D</kbd> run · <kbd>Space</kbd> jump
+      </div>
+    </aside>
+  </main>
+</div>
+
+<script>
+"use strict";
+/* ============================================================================
+   Platform Fighter Level Designer
+   Single-file browser app. Draw terrain (flats, walls, slopes, gentle ramps),
+   resize the arena, playtest with real slope-aware physics, and export the
+   level as a PNG image or a self-contained, playable HTML file.
+
+   The pure functions getSlope / isSolid / surfFrac / drawBackground /
+   drawTilesCore / stepPlayer are written to be self-contained (they only touch
+   their arguments) so they can be serialized with Function.prototype.toString()
+   and embedded verbatim into the exported HTML — one source of truth for both
+   the in-editor playtest and the export.
+   ========================================================================== */
+
+/* ---- Tile model -----------------------------------------------------------
+   0 empty · 1 ground (grass) · 2 wall (stone) · 3 slope ◢ · 4 slope ◣
+   5 gentle-right-low · 6 gentle-right-high · 7 gentle-left-high · 8 gentle-left-low
+   A slope's walkable surface is a line across the cell: fraction 0 = cell top,
+   1 = cell bottom. l/r are the fractions at the cell's left/right edge.        */
+const SLOPE = {
+  3:{l:1,r:0}, 4:{l:0,r:1},
+  5:{l:1,r:0.5}, 6:{l:0.5,r:0},
+  7:{l:0,r:0.5}, 8:{l:0.5,r:1}
+};
+
+const THEME = {
+  sky1:'#8ec9ff', sky2:'#e8f4ff',
+  dirt1:'#b0763f', dirt2:'#6f4620',
+  grass1:'#6fce57', grass2:'#3f9c36',
+  stone1:'#9aa3b6', stone2:'#565f73',
+  stoneCap:'#c3cad9',
+  edge:'rgba(20,14,8,0.35)'
+};
+
+const CFG = {
+  grav:2400, moveAccel:3200, maxRun:560, friction:2800,
+  jumpVel:820, maxFall:1700, coyote:0.09, jumpBuf:0.09
+};
+
+/* ---- pure helpers (serialized into export) -------------------------------- */
+function getSlope(slopes,t){ return slopes[t] || {l:0,r:0}; }
+function isSolid(t){ return t===1 || t===2; }
+function surfFrac(slopes,t,u){ const s=getSlope(slopes,t); return s.l+(s.r-s.l)*u; }
+
+function drawBackground(ctx,w,h,theme){
+  const g=ctx.createLinearGradient(0,0,0,h);
+  g.addColorStop(0,theme.sky1); g.addColorStop(1,theme.sky2);
+  ctx.fillStyle=g; ctx.fillRect(0,0,w,h);
+}
+
+/* Draws every tile of a level. No grid lines / no hover — pure terrain, shared
+   by the editor base layer, the palette swatches and the exported player. */
+function drawTilesCore(ctx,level,T,theme,slopes){
+  const cells=level.cells, cols=level.cols, rows=level.rows;
+  for(let r=0;r<rows;r++){
+    for(let c=0;c<cols;c++){
+      const t=cells[r][c]; if(!t) continue;
+      const x0=c*T, y0=r*T;
+      const s=getSlope(slopes,t);
+      const sl=y0+T*s.l, sr=y0+T*s.r;      // surface y at left / right edge
+      const wall=(t===2);
+      // body
+      ctx.beginPath();
+      ctx.moveTo(x0,sl); ctx.lineTo(x0+T,sr);
+      ctx.lineTo(x0+T,y0+T); ctx.lineTo(x0,y0+T); ctx.closePath();
+      const bg=ctx.createLinearGradient(0,y0,0,y0+T);
+      if(wall){ bg.addColorStop(0,theme.stone1); bg.addColorStop(1,theme.stone2); }
+      else{ bg.addColorStop(0,theme.dirt1); bg.addColorStop(1,theme.dirt2); }
+      ctx.fillStyle=bg; ctx.fill();
+      // surface cap band (grass for ground/slopes, light stone for walls)
+      const band=Math.max(3,T*0.22);
+      ctx.save(); ctx.clip();
+      ctx.beginPath();
+      ctx.moveTo(x0,sl); ctx.lineTo(x0+T,sr);
+      ctx.lineTo(x0+T,sr+band); ctx.lineTo(x0,sl+band); ctx.closePath();
+      if(wall){ ctx.fillStyle=theme.stoneCap; }
+      else{
+        const gg=ctx.createLinearGradient(0,y0,0,y0+band+2);
+        gg.addColorStop(0,theme.grass1); gg.addColorStop(1,theme.grass2);
+        ctx.fillStyle=gg;
+      }
+      ctx.fill();
+      ctx.restore();
+      // wall brick hint
+      if(wall){
+        ctx.strokeStyle='rgba(255,255,255,0.06)'; ctx.lineWidth=1;
+        const midY=y0+T*0.5;
+        ctx.beginPath(); ctx.moveTo(x0,midY); ctx.lineTo(x0+T,midY); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(x0+T*0.5,y0); ctx.lineTo(x0+T*0.5,y0+T*0.5); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(x0+T*0.25,midY); ctx.lineTo(x0+T*0.25,y0+T); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(x0+T*0.75,midY); ctx.lineTo(x0+T*0.75,y0+T); ctx.stroke();
+      }
+      // outline
+      ctx.strokeStyle=theme.edge; ctx.lineWidth=Math.max(1,T*0.03);
+      ctx.beginPath();
+      ctx.moveTo(x0,sl); ctx.lineTo(x0+T,sr);
+      ctx.stroke();
+    }
+  }
+}
+
+/* Advance one physics tick. Mutates p. Pure aside from that. */
+function stepPlayer(level,p,input,T,cfg,slopes,dt){
+  const cols=level.cols, rows=level.rows, cells=level.cells;
+  const W=cols*T, H=rows*T;
+  const cellAt=(c,r)=> (c<0||r<0||c>=cols||r>=rows)?0:cells[r][c];
+
+  // ---- horizontal intent
+  if(input.left)  p.vx -= cfg.moveAccel*dt;
+  if(input.right) p.vx += cfg.moveAccel*dt;
+  if(input.left===input.right){
+    const s=Math.sign(p.vx), d=cfg.friction*dt;
+    if(Math.abs(p.vx)<=d) p.vx=0; else p.vx-=s*d;
+  }
+  if(p.vx> cfg.maxRun) p.vx= cfg.maxRun;
+  if(p.vx<-cfg.maxRun) p.vx=-cfg.maxRun;
+
+  // ---- move X, resolve against solids. Slopes are ridden (not blocked). A
+  //      small solid lip in the path with clear headroom (e.g. where a ramp
+  //      meets a ledge) is auto-stepped instead of blocking, so angled blocks
+  //      blend smoothly onto the flat blocks they lead up to. Full-tile
+  //      obstacles (STEP < tile) still block like proper walls.
+  p.x += p.vx*dt;
+  {
+    const STEP=T*0.55;
+    let c0=Math.floor(p.x/T), c1=Math.floor((p.x+p.w)/T);
+    let r0=Math.floor(p.y/T), r1=Math.floor((p.y+p.h)/T);
+    let stepY=null;
+    for(let r=r0;r<=r1;r++) for(let c=c0;c<=c1;c++){
+      if(!isSolid(cellAt(c,r))) continue;
+      const tx=c*T, topY=r*T, foot=p.y+p.h;
+      const oy=Math.min(foot-topY,(topY+T)-p.y);
+      if(oy<=1) continue;
+      if(p.grounded && !isSolid(cellAt(c,r-1)) && topY>=foot-STEP && topY<=foot+2){
+        stepY=(stepY===null)?topY:Math.min(stepY,topY); continue;
+      }
+      const oL=(p.x+p.w)-tx, oR=(tx+T)-p.x;
+      if(oL<oR){ p.x-=oL; } else { p.x+=oR; }
+      p.vx=0;
+    }
+    if(stepY!==null){ p.y=stepY-p.h; }
+  }
+  // world edges (solid walls around the arena)
+  if(p.x<0){p.x=0;p.vx=0;}
+  if(p.x+p.w>W){p.x=W-p.w;p.vx=0;}
+
+  // ---- gravity + move Y
+  p.vy += cfg.grav*dt;
+  if(p.vy>cfg.maxFall) p.vy=cfg.maxFall;
+  const prevFoot=p.y+p.h;
+  p.y += p.vy*dt;
+
+  const wasGrounded=p.grounded;
+  p.grounded=false;
+
+  // solids (floors / ceilings)
+  {
+    let c0=Math.floor(p.x/T), c1=Math.floor((p.x+p.w)/T);
+    let r0=Math.floor(p.y/T), r1=Math.floor((p.y+p.h)/T);
+    for(let r=r0;r<=r1;r++) for(let c=c0;c<=c1;c++){
+      if(!isSolid(cellAt(c,r))) continue;
+      const ty=r*T;
+      const ox=Math.min((p.x+p.w)-c*T,(c*T+T)-p.x);
+      if(ox<=1) continue;
+      const oT=(p.y+p.h)-ty, oB=(ty+T)-p.y;
+      if(oT<oB){ p.y-=oT; if(p.vy>0)p.vy=0; p.grounded=true; }
+      else{ p.y+=oB; if(p.vy<0)p.vy=0; }
+    }
+  }
+
+  // slopes: sample the walkable surface under the feet and stand on it
+  {
+    const footX=Math.max(0,Math.min(W-0.01,p.x+p.w/2));
+    const c=Math.floor(footX/T);
+    const snap=wasGrounded? T*0.85 : 6;
+    let best=null;
+    for(let r=0;r<rows;r++){
+      const t=cellAt(c,r); if(!slopes[t]) continue;
+      const u=(footX-c*T)/T;
+      const sy=r*T+T*surfFrac(slopes,t,u);
+      const foot=p.y+p.h;
+      const crossed=(prevFoot<=sy+0.5 && foot>=sy-0.5);
+      if((foot>=sy-1 && foot<=sy+snap && p.vy>=0) || (crossed && p.vy>=0)){
+        if(best===null || sy<best) best=sy;
+      }
+    }
+    if(best!==null){ p.y=best-p.h; if(p.vy>0)p.vy=0; p.grounded=true; }
+  }
+
+  if(p.y<0){p.y=0; if(p.vy<0)p.vy=0;}
+
+  // ---- jump (with coyote time + small input buffer)
+  p.coyote = p.grounded? cfg.coyote : Math.max(0,p.coyote-dt);
+  p.jbuf = input.jump? cfg.jumpBuf : Math.max(0,(p.jbuf||0)-dt);
+  if(p.jbuf>0 && p.coyote>0){ p.vy=-cfg.jumpVel; p.grounded=false; p.coyote=0; p.jbuf=0; }
+  // variable jump height: cut when the button is released early
+  if(!input.jump && p.vy<-cfg.jumpVel*0.35) p.vy=-cfg.jumpVel*0.35;
+
+  p.facing = p.vx>4?1 : p.vx<-4?-1 : p.facing;
+
+  // fell out of the arena
+  if(p.y>H+T*3){ p.dead=true; }
+}
+
+/* ============================ Editor state ================================= */
+const AUTOSAVE='pf_level_designer_v1';
+const state={
+  cols:28, rows:16, tile:1, grid:true, playing:false,
+  cells:null
+};
+function blankGrid(cols,rows){
+  const g=[]; for(let r=0;r<rows;r++){ g.push(new Array(cols).fill(0)); } return g;
+}
+function starterLevel(){
+  const C=state.cols, R=state.rows;
+  const g=blankGrid(C,R);
+  const fillDown=(c,fromRow)=>{ for(let r=fromRow;r<R;r++) if(c>=0&&c<C) g[r][c]=1; };
+  // solid ground, two tiles thick
+  for(let c=0;c<C;c++){ g[R-1][c]=1; g[R-2][c]=1; }
+  // a hill: 45° ramps up, a flat crest, ramps back down — the angled blocks
+  // blend seamlessly into the floor below and the flat crest on top
+  g[R-3][8]=3;
+  fillDown(9,R-3); g[R-4][9]=3;
+  for(let c=10;c<=13;c++){ fillDown(c,R-3); g[R-4][c]=1; }
+  fillDown(14,R-3); g[R-4][14]=4;
+  g[R-3][15]=4;
+  // a gentle 2-wide ramp easing onto a low step
+  g[R-3][18]=5; g[R-3][19]=6; g[R-3][20]=1; g[R-3][21]=1;
+  // a stone wall
+  g[R-3][24]=2; g[R-4][24]=2; g[R-5][24]=2;
+  // floating platforms to leap between
+  for(let c=3;c<=6;c++) g[R-8][c]=1;
+  for(let c=19;c<=23;c++) g[R-10][c]=1;
+  return g;
+}
+
+/* ---- palette definition --------------------------------------------------- */
+const PALETTE=[
+  {t:1, name:'Ground',        key:'1', kind:'paint'},
+  {t:2, name:'Wall',          key:'2', kind:'paint'},
+  {t:3, name:'Slope ◢',       key:'3', kind:'paint'},
+  {t:4, name:'Slope ◣',       key:'4', kind:'paint'},
+  {t:5, name:'Ramp ◢ gentle', key:'5', kind:'ramp', pair:[5,6]},   // low + high, ascends right
+  {t:7, name:'Ramp ◣ gentle', key:'6', kind:'ramp', pair:[7,8]},   // high + low, ascends left
+  {t:0, name:'Eraser',        key:'E', kind:'erase'}
+];
+let toolIndex=0;
+
+/* ---- canvas / geometry ---------------------------------------------------- */
+const cv=document.getElementById('c');
+const ctx=cv.getContext('2d');
+const wrap=document.getElementById('wrap');
+const stage=document.getElementById('stage');
+let T=32, DPR=Math.min(2,window.devicePixelRatio||1);
+
+function computeTile(){
+  const pad=28;
+  const availW=stage.clientWidth-pad, availH=stage.clientHeight-pad;
+  T=Math.max(14,Math.floor(Math.min(availW/state.cols, availH/state.rows)));
+}
+function sizeCanvas(){
+  computeTile();
+  const w=T*state.cols, h=T*state.rows;
+  cv.style.width=w+'px'; cv.style.height=h+'px';
+  cv.width=Math.round(w*DPR); cv.height=Math.round(h*DPR);
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+}
+
+function levelObj(){ return {cols:state.cols,rows:state.rows,cells:state.cells}; }
+
+function render(){
+  const w=T*state.cols, h=T*state.rows;
+  ctx.clearRect(0,0,w,h);
+  drawBackground(ctx,w,h,THEME);
+  drawTilesCore(ctx,levelObj(),T,THEME,SLOPE);
+  if(state.grid) drawGrid(w,h);
+  if(!state.playing && hover.c>=0) drawHover();
+  if(state.playing) drawPlayer();
+}
+function drawGrid(w,h){
+  ctx.strokeStyle='rgba(255,255,255,0.06)'; ctx.lineWidth=1;
+  ctx.beginPath();
+  for(let c=0;c<=state.cols;c++){ ctx.moveTo(c*T+.5,0); ctx.lineTo(c*T+.5,h); }
+  for(let r=0;r<=state.rows;r++){ ctx.moveTo(0,r*T+.5); ctx.lineTo(w,r*T+.5); }
+  ctx.stroke();
+}
+const hover={c:-1,r:-1};
+function drawHover(){
+  const tool=PALETTE[toolIndex];
+  ctx.save(); ctx.globalAlpha=0.55;
+  if(tool.kind==='erase'){
+    ctx.globalAlpha=1; ctx.strokeStyle='#ff8a8a'; ctx.lineWidth=2;
+    ctx.strokeRect(hover.c*T+1,hover.r*T+1,T-2,T-2);
+    ctx.beginPath(); ctx.moveTo(hover.c*T+5,hover.r*T+5);
+    ctx.lineTo(hover.c*T+T-5,hover.r*T+T-5); ctx.stroke();
+  }else{
+    const cells=blankGrid(state.cols,state.rows);
+    const put=(c,t)=>{ if(c>=0&&c<state.cols) cells[hover.r][c]=t; };
+    if(tool.kind==='ramp'){ put(hover.c,tool.pair[0]); put(hover.c+1,tool.pair[1]); }
+    else put(hover.c,tool.t);
+    drawTilesCore(ctx,{cols:state.cols,rows:state.rows,cells},T,THEME,SLOPE);
+    ctx.globalAlpha=1; ctx.strokeStyle='rgba(255,255,255,.7)'; ctx.lineWidth=1.5;
+    ctx.strokeRect(hover.c*T+1,hover.r*T+1,T-2,T-2);
+  }
+  ctx.restore();
+}
+
+/* ============================ Painting ===================================== */
+let painting=false, paintMode=0; // 1 paint, 2 erase
+function cellFromEvent(e){
+  const rect=cv.getBoundingClientRect();
+  const px=(e.clientX-rect.left)/rect.width*state.cols;
+  const py=(e.clientY-rect.top)/rect.height*state.rows;
+  return {c:Math.floor(px), r:Math.floor(py)};
+}
+function inBounds(c,r){ return c>=0&&r>=0&&c<state.cols&&r<state.rows; }
+function applyTool(c,r,erase){
+  const tool=PALETTE[toolIndex];
+  if(erase||tool.kind==='erase'){ if(inBounds(c,r)) state.cells[r][c]=0; return; }
+  if(tool.kind==='ramp'){
+    if(inBounds(c,r)) state.cells[r][c]=tool.pair[0];
+    if(inBounds(c+1,r)) state.cells[r][c+1]=tool.pair[1];
+    return;
+  }
+  if(inBounds(c,r)) state.cells[r][c]=tool.t;
+}
+// paint along a line so fast drags don't leave gaps
+let lastCell=null;
+function paintLine(a,b,erase){
+  if(!a){ applyTool(b.c,b.r,erase); return; }
+  let x0=a.c,y0=a.r,x1=b.c,y1=b.r;
+  const dx=Math.abs(x1-x0), dy=Math.abs(y1-y0);
+  const sx=x0<x1?1:-1, sy=y0<y1?1:-1; let err=dx-dy;
+  while(true){
+    applyTool(x0,y0,erase);
+    if(x0===x1&&y0===y1) break;
+    const e2=2*err;
+    if(e2>-dy){ err-=dy; x0+=sx; }
+    if(e2<dx){ err+=dx; y0+=sy; }
+  }
+}
+function onPointerDown(e){
+  if(state.playing) return;
+  e.preventDefault(); cv.setPointerCapture(e.pointerId);
+  const erase=(e.button===2)|| (PALETTE[toolIndex].kind==='erase');
+  paintMode=erase?2:1; painting=true;
+  const p=cellFromEvent(e); lastCell=null;
+  paintLine(lastCell,p,paintMode===2); lastCell=p;
+  hover.c=p.c; hover.r=p.r;
+  render(); scheduleSave();
+}
+function onPointerMove(e){
+  if(state.playing) return;
+  const p=cellFromEvent(e);
+  hover.c=p.c; hover.r=p.r;
+  if(painting){ paintLine(lastCell,p,paintMode===2); lastCell=p; scheduleSave(); }
+  render();
+}
+function onPointerUp(e){ painting=false; lastCell=null; }
+function onLeave(){ if(!painting){ hover.c=-1; hover.r=-1; render(); } }
+
+cv.addEventListener('pointerdown',onPointerDown);
+cv.addEventListener('pointermove',onPointerMove);
+window.addEventListener('pointerup',onPointerUp);
+cv.addEventListener('pointerleave',onLeave);
+cv.addEventListener('contextmenu',e=>e.preventDefault());
+
+/* ============================ Palette UI =================================== */
+const paletteEl=document.getElementById('palette');
+function buildPalette(){
+  paletteEl.innerHTML='';
+  PALETTE.forEach((item,i)=>{
+    const el=document.createElement('div');
+    el.className='tile'+(i===toolIndex?' sel':'');
+    const isRamp=item.kind==='ramp';
+    const sw=document.createElement('canvas');
+    const cols=isRamp?2:1, ts=isRamp?26:34, w=ts*cols, h=34;
+    sw.width=w*DPR; sw.height=h*DPR; sw.style.width=w+'px'; sw.style.height=h+'px';
+    const sc=sw.getContext('2d'); sc.setTransform(DPR,0,0,DPR,0,0);
+    drawSwatch(sc,item,ts,w,h,cols);
+    el.appendChild(sw);
+    const label=document.createElement('span'); label.textContent=item.name;
+    el.appendChild(label);
+    const k=document.createElement('div'); k.className='key'; k.textContent=item.key;
+    el.appendChild(k);
+    el.title=item.name+'  ('+item.key+')';
+    el.addEventListener('click',()=>selectTool(i));
+    paletteEl.appendChild(el);
+  });
+}
+function drawSwatch(sc,item,ts,w,h,cols){
+  drawBackground(sc,w,h,THEME);
+  if(item.kind==='erase'){
+    sc.strokeStyle='#ff8a8a'; sc.lineWidth=2;
+    sc.strokeRect(6,6,w-12,h-12);
+    sc.beginPath(); sc.moveTo(9,9); sc.lineTo(w-9,h-9); sc.stroke();
+    return;
+  }
+  const rows=1; const cells=[[]];
+  if(item.kind==='ramp'){ cells[0]=[item.pair[0],item.pair[1]]; }
+  else cells[0]=[item.t];
+  const yOff=h-ts;
+  sc.save(); sc.translate(0,yOff);
+  drawTilesCore(sc,{cols:cols,rows:1,cells},ts,THEME,SLOPE);
+  sc.restore();
+}
+function selectTool(i){
+  toolIndex=i;
+  [...paletteEl.children].forEach((el,idx)=>el.classList.toggle('sel',idx===i));
+  document.getElementById('hudTool').textContent=PALETTE[i].name;
+  state.tile=PALETTE[i].t;
+}
+
+/* ============================ Size controls =============================== */
+const MINW=8,MAXW=64,MINH=6,MAXH=40;
+function resize(dcols,drows){
+  const nc=Math.max(MINW,Math.min(MAXW,state.cols+dcols));
+  const nr=Math.max(MINH,Math.min(MAXH,state.rows+drows));
+  if(nc===state.cols&&nr===state.rows) return;
+  const g=blankGrid(nc,nr);
+  // anchor content to the bottom-left so the ground line stays put
+  for(let r=0;r<Math.min(nr,state.rows);r++){
+    for(let c=0;c<Math.min(nc,state.cols);c++){
+      g[nr-1-r][c]=state.cells[state.rows-1-r][c];
+    }
+  }
+  state.cols=nc; state.rows=nr; state.cells=g;
+  updateSizeLabels(); sizeCanvas(); render(); scheduleSave();
+}
+function updateSizeLabels(){
+  document.getElementById('wVal').textContent=state.cols;
+  document.getElementById('hVal').textContent=state.rows;
+}
+document.getElementById('wPlus').onclick =()=>resize(+2,0);
+document.getElementById('wMinus').onclick=()=>resize(-2,0);
+document.getElementById('hPlus').onclick =()=>resize(0,+2);
+document.getElementById('hMinus').onclick=()=>resize(0,-2);
+
+/* ============================ Toolbar actions ============================= */
+document.getElementById('clearBtn').onclick=()=>{
+  if(!confirm('Clear the whole arena?')) return;
+  state.cells=blankGrid(state.cols,state.rows); render(); scheduleSave();
+};
+document.getElementById('gridBtn').onclick=()=>{
+  state.grid=!state.grid;
+  document.getElementById('gridBadge').textContent='Grid '+(state.grid?'✓':'✗');
+  render();
+};
+const nameEl=document.getElementById('name');
+nameEl.addEventListener('input',scheduleSave);
+function safeName(){ return (nameEl.value.trim()||'level').replace(/[^\w.-]+/g,'-'); }
+
+/* ---- keyboard ------------------------------------------------------------- */
+window.addEventListener('keydown',e=>{
+  if(e.target.tagName==='INPUT') return;
+  const k=e.key.toLowerCase();
+  if(state.playing){
+    if(k==='p'||k==='escape'){ stopPlay(); e.preventDefault(); }
+    return;
+  }
+  const idx=PALETTE.findIndex(p=>p.key.toLowerCase()===k);
+  if(idx>=0){ selectTool(idx); e.preventDefault(); return; }
+  if(k==='p'){ startPlay(); e.preventDefault(); }
+});
+
+/* ============================ Export: PNG ================================= */
+document.getElementById('pngBtn').onclick=()=>{
+  const scale=Math.max(2,Math.ceil(48/T)); // render crisply, min ~48px tiles
+  const ts=T*scale;
+  const w=ts*state.cols, h=ts*state.rows;
+  const off=document.createElement('canvas');
+  off.width=w; off.height=h;
+  const oc=off.getContext('2d');
+  drawBackground(oc,w,h,THEME);
+  drawTilesCore(oc,levelObj(),ts,THEME,SLOPE);
+  off.toBlob(blob=>downloadBlob(blob,safeName()+'.png'),'image/png');
+};
+
+/* ============================ Export: HTML =============================== */
+document.getElementById('htmlBtn').onclick=()=>{
+  const html=buildPlayableHTML();
+  downloadBlob(new Blob([html],{type:'text/html'}),safeName()+'.html');
+};
+
+function buildPlayableHTML(){
+  const level=levelObj();
+  const data={
+    name:nameEl.value.trim()||'level',
+    level, theme:THEME, slope:SLOPE, cfg:CFG
+  };
+  // ship the exact pure functions the editor uses
+  const engine=[getSlope,isSolid,surfFrac,drawBackground,drawTilesCore,stepPlayer]
+    .map(fn=>fn.toString()).join('\n');
+  return EXPORT_TEMPLATE
+    .replace('/*__DATA__*/', 'const BUNDLE='+JSON.stringify(data)+';')
+    .replace('/*__ENGINE__*/', engine)
+    .replace(/__TITLE__/g, escapeHtml(data.name));
+}
+function escapeHtml(s){ return String(s).replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m])); }
+
+/* The exported page: self-contained, no dependencies, playable with keyboard
+   or on-screen buttons. Physics + rendering are injected at the ENGINE marker
+   (the same functions the editor runs), so what you playtest is what you export. */
+const EXPORT_TEMPLATE=`<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>__TITLE__ — platform fighter level</title>
+<style>
+ html,body{margin:0;height:100%;background:#0c1018;overflow:hidden;
+   font:14px system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#dfe6f3}
+ #stage{position:fixed;inset:0;display:grid;place-items:center}
+ canvas{image-rendering:auto;box-shadow:0 10px 40px rgba(0,0,0,.6);border-radius:6px;max-width:100%;max-height:100%;touch-action:none}
+ #hint{position:fixed;top:10px;left:50%;transform:translateX(-50%);
+   background:rgba(10,14,22,.72);border:1px solid #2b3446;border-radius:999px;
+   padding:6px 14px;font-size:13px;color:#aeb9d0}
+ #hint b{color:#fff}
+ #pad{position:fixed;bottom:14px;left:0;right:0;display:flex;justify-content:space-between;
+   padding:0 16px;pointer-events:none}
+ .pad-l,.pad-r{display:flex;gap:12px}
+ .btn{pointer-events:auto;width:64px;height:64px;border-radius:50%;
+   background:rgba(30,40,60,.7);border:1px solid #3a465f;color:#fff;font-size:24px;
+   display:grid;place-items:center;user-select:none;-webkit-user-select:none}
+ .btn:active{background:rgba(60,90,140,.8)}
+ @media(hover:hover){#pad{display:none}}
+</style></head><body>
+<div id="stage"><canvas id="game"></canvas></div>
+<div id="hint">▲ <b>__TITLE__</b> — <b>←→</b>/<b>A D</b> run · <b>Space</b>/<b>W</b> jump · <b>R</b> reset</div>
+<div id="pad">
+  <div class="pad-l"><div class="btn" data-k="left">◀</div><div class="btn" data-k="right">▶</div></div>
+  <div class="pad-r"><div class="btn" data-k="jump">⤒</div></div>
+</div>
+<script>
+/*__DATA__*/
+/*__ENGINE__*/
+(function(){
+  const L=BUNDLE.level, THEME=BUNDLE.theme, SLOPE=BUNDLE.slope, CFG=BUNDLE.cfg;
+  const cv=document.getElementById('game'), ctx=cv.getContext('2d');
+  const cols=L.cols, rows=L.rows;
+  let T=32, DPR=Math.min(2,window.devicePixelRatio||1);
+  function fit(){
+    const pad=24;
+    T=Math.max(16,Math.floor(Math.min((innerWidth-pad)/cols,(innerHeight-pad)/rows)));
+    const w=T*cols,h=T*rows;
+    cv.style.width=w+'px';cv.style.height=h+'px';
+    cv.width=Math.round(w*DPR);cv.height=Math.round(h*DPR);
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+  }
+  addEventListener('resize',fit); fit();
+
+  function spawn(){
+    // drop the player in above the highest ground near the left third
+    let sc=Math.max(1,Math.floor(cols*0.15)), sr=0;
+    for(let r=0;r<rows;r++){ if(L.cells[r][sc]){ sr=r; break; } if(r===rows-1) sr=rows; }
+    return {x:sc*T+T*0.2,y:(sr-2)*T,w:T*0.55,h:T*0.9,vx:0,vy:0,
+            grounded:false,facing:1,coyote:0,jbuf:0,dead:false};
+  }
+  let p=spawn();
+  const input={left:false,right:false,jump:false};
+  const keymap={arrowleft:'left',a:'left',arrowright:'right',d:'right',
+    ' ':'jump',arrowup:'jump',w:'jump'};
+  addEventListener('keydown',e=>{
+    const k=e.key.toLowerCase();
+    if(k==='r'){ p=spawn(); e.preventDefault(); return; }
+    if(keymap[k]){ input[keymap[k]]=true; e.preventDefault(); }
+  });
+  addEventListener('keyup',e=>{ const m=keymap[e.key.toLowerCase()]; if(m) input[m]=false; });
+  document.querySelectorAll('.btn').forEach(b=>{
+    const k=b.dataset.k;
+    const on=e=>{e.preventDefault();input[k]=true;};
+    const off=e=>{e.preventDefault();input[k]=false;};
+    b.addEventListener('touchstart',on,{passive:false});
+    b.addEventListener('touchend',off);b.addEventListener('touchcancel',off);
+    b.addEventListener('mousedown',on);b.addEventListener('mouseup',off);b.addEventListener('mouseleave',off);
+  });
+
+  function drawPlayer(){
+    const x=p.x,y=p.y,w=p.w,h=p.h;
+    ctx.save();
+    ctx.fillStyle='rgba(0,0,0,.18)';
+    ctx.beginPath(); ctx.ellipse(x+w/2,y+h,w*0.6,T*0.14,0,0,7); ctx.fill();
+    const g=ctx.createLinearGradient(0,y,0,y+h);
+    g.addColorStop(0,'#ff7a9c'); g.addColorStop(1,'#e23e6a');
+    ctx.fillStyle=g; roundRect(ctx,x,y,w,h,Math.min(6,w*0.3)); ctx.fill();
+    ctx.fillStyle='#fff';
+    const ex=p.facing>=0?x+w*0.62:x+w*0.18;
+    ctx.beginPath(); ctx.arc(ex,y+h*0.32,w*0.12,0,7); ctx.fill();
+    ctx.fillStyle='#1a2030';
+    ctx.beginPath(); ctx.arc(ex+p.facing*w*0.03,y+h*0.32,w*0.06,0,7); ctx.fill();
+    ctx.restore();
+  }
+  function roundRect(c,x,y,w,h,r){c.beginPath();c.moveTo(x+r,y);c.arcTo(x+w,y,x+w,y+h,r);
+    c.arcTo(x+w,y+h,x,y+h,r);c.arcTo(x,y+h,x,y,r);c.arcTo(x,y,x+w,y,r);c.closePath();}
+
+  let last=0;
+  function frame(ts){
+    const dt=Math.min(1/30,(ts-last)/1000||0); last=ts;
+    if(dt>0){
+      stepPlayer(L,p,input,T,CFG,SLOPE,dt);
+      if(p.dead) p=spawn();
+    }
+    const w=T*cols,h=T*rows;
+    ctx.clearRect(0,0,w,h);
+    drawBackground(ctx,w,h,THEME);
+    drawTilesCore(ctx,L,T,THEME,SLOPE);
+    drawPlayer();
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+})();
+<\/script></body></html>`;
+
+/* ============================ Import ===================================== */
+document.getElementById('importBtn').onclick=()=>document.getElementById('fileIn').click();
+document.getElementById('fileIn').addEventListener('change',e=>{
+  const f=e.target.files[0]; if(!f) return;
+  const rd=new FileReader();
+  rd.onload=()=>{ loadFromText(String(rd.result),f.name); e.target.value=''; };
+  rd.readAsText(f);
+});
+function loadFromText(text,fname){
+  try{
+    let data=null;
+    if(/\.json$/i.test(fname)){ data=JSON.parse(text); }
+    else{
+      const m=text.match(/const BUNDLE=(\{[\s\S]*?\});/);
+      if(m) data=JSON.parse(m[1]);
+    }
+    const lvl=data&&(data.level||data);
+    if(!lvl||!Array.isArray(lvl.cells)) throw new Error('no level data found');
+    state.cols=lvl.cols; state.rows=lvl.rows; state.cells=lvl.cells;
+    if(data.name) nameEl.value=data.name;
+    updateSizeLabels(); sizeCanvas(); render(); scheduleSave();
+  }catch(err){ alert('Could not import this file:\n'+err.message); }
+}
+
+/* ============================ Downloads =================================== */
+function downloadBlob(blob,filename){
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url; a.download=filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),4000);
+}
+
+/* ============================ Autosave =================================== */
+let saveTimer=null;
+function scheduleSave(){ clearTimeout(saveTimer); saveTimer=setTimeout(save,400); }
+function save(){
+  try{ localStorage.setItem(AUTOSAVE,JSON.stringify({
+    cols:state.cols,rows:state.rows,cells:state.cells,name:nameEl.value,grid:state.grid
+  })); }catch(e){}
+}
+function tryLoad(){
+  try{
+    const raw=localStorage.getItem(AUTOSAVE); if(!raw) return false;
+    const d=JSON.parse(raw);
+    if(!d||!Array.isArray(d.cells)) return false;
+    state.cols=d.cols; state.rows=d.rows; state.cells=d.cells;
+    if(typeof d.grid==='boolean') state.grid=d.grid;
+    if(d.name) nameEl.value=d.name;
+    return true;
+  }catch(e){ return false; }
+}
+
+/* ============================ Playtest ==================================== */
+let player=null, rafId=0, lastTs=0;
+const playInput={left:false,right:false,jump:false};
+const playKeymap={arrowleft:'left',a:'left',arrowright:'right',d:'right',
+  ' ':'jump',arrowup:'jump',w:'jump'};
+function playerSpawn(){
+  let sc=Math.max(1,Math.floor(state.cols*0.15)), sr=state.rows;
+  for(let r=0;r<state.rows;r++){ if(state.cells[r][sc]){ sr=r; break; } }
+  return {x:sc*T+T*0.2,y:(sr-2)*T,w:T*0.55,h:T*0.9,vx:0,vy:0,
+          grounded:false,facing:1,coyote:0,jbuf:0,dead:false};
+}
+function startPlay(){
+  state.playing=true; player=playerSpawn();
+  document.body.classList.add('playing');
+  document.getElementById('modeBadge').textContent='Playing';
+  document.getElementById('modeBadge').classList.add('on');
+  document.getElementById('playBtn').textContent='■ Stop';
+  document.getElementById('playBtn').classList.remove('good');
+  document.getElementById('hudTool').textContent='Playtest';
+  const hp=document.getElementById('hudPlay');
+  hp.style.display='block';
+  hp.innerHTML='<b>← →</b> / <b>A D</b> run &nbsp;·&nbsp; <b>Space</b> jump &nbsp;·&nbsp; <b>P</b> to stop';
+  hover.c=-1;
+  window.addEventListener('keydown',playKeyDown);
+  window.addEventListener('keyup',playKeyUp);
+  lastTs=0; rafId=requestAnimationFrame(playLoop);
+}
+function stopPlay(){
+  state.playing=false; cancelAnimationFrame(rafId);
+  document.body.classList.remove('playing');
+  document.getElementById('modeBadge').textContent='Editing';
+  document.getElementById('modeBadge').classList.remove('on');
+  document.getElementById('playBtn').textContent='▶ Playtest';
+  document.getElementById('playBtn').classList.add('good');
+  document.getElementById('hudTool').textContent=PALETTE[toolIndex].name;
+  document.getElementById('hudPlay').style.display='none';
+  window.removeEventListener('keydown',playKeyDown);
+  window.removeEventListener('keyup',playKeyUp);
+  render();
+}
+function playKeyDown(e){
+  const k=e.key.toLowerCase();
+  if(k==='r'){ player=playerSpawn(); e.preventDefault(); return; }
+  if(playKeymap[k]){ playInput[playKeymap[k]]=true; e.preventDefault(); }
+}
+function playKeyUp(e){ const m=playKeymap[e.key.toLowerCase()]; if(m) playInput[m]=false; }
+function playLoop(ts){
+  if(!state.playing) return;
+  const dt=Math.min(1/30,(ts-lastTs)/1000||0); lastTs=ts;
+  if(dt>0){
+    stepPlayer(levelObj(),player,playInput,T,CFG,SLOPE,dt);
+    if(player.dead) player=playerSpawn();
+  }
+  render();
+  rafId=requestAnimationFrame(playLoop);
+}
+function drawPlayer(){
+  if(!player) return;
+  const p=player, x=p.x,y=p.y,w=p.w,h=p.h;
+  ctx.save();
+  ctx.fillStyle='rgba(0,0,0,.18)';
+  ctx.beginPath(); ctx.ellipse(x+w/2,y+h,w*0.6,T*0.14,0,0,Math.PI*2); ctx.fill();
+  const g=ctx.createLinearGradient(0,y,0,y+h);
+  g.addColorStop(0,'#ff7a9c'); g.addColorStop(1,'#e23e6a');
+  ctx.fillStyle=g;
+  const r=Math.min(6,w*0.3);
+  ctx.beginPath();
+  ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r);
+  ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); ctx.fill();
+  ctx.fillStyle='#fff';
+  const ex=p.facing>=0?x+w*0.62:x+w*0.18;
+  ctx.beginPath(); ctx.arc(ex,y+h*0.32,w*0.12,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='#1a2030';
+  ctx.beginPath(); ctx.arc(ex+p.facing*w*0.03,y+h*0.32,w*0.06,0,Math.PI*2); ctx.fill();
+  ctx.restore();
+}
+document.getElementById('playBtn').onclick=()=>{ state.playing?stopPlay():startPlay(); };
+
+/* ============================ Boot ======================================= */
+function boot(){
+  if(!tryLoad()){ state.cells=starterLevel(); }
+  document.getElementById('gridBadge').textContent='Grid '+(state.grid?'✓':'✗');
+  buildPalette(); selectTool(0);
+  updateSizeLabels(); sizeCanvas(); render();
+}
+window.addEventListener('resize',()=>{ sizeCanvas(); render(); });
+boot();
+</script>
+</body>
+</html>
