@@ -123,7 +123,7 @@
     <div id="stage">
       <div id="wrap"><canvas id="c"></canvas></div>
       <div id="hud">
-        <div><b id="hudTool">Ground</b> selected · left-drag to paint, right-drag to erase</div>
+        <div><b id="hudTool">Ground</b> <span id="hudHint">selected · left-drag to paint · right-drag to erase</span></div>
         <div class="dim" id="hudPlay" style="display:none"></div>
       </div>
     </div>
@@ -136,8 +136,9 @@
           <span class="spacer"></span>
           <button id="gridBtn" class="icon" title="Toggle grid">#</button>
         </div>
-        Keys <kbd>1</kbd>–<kbd>6</kbd> blocks · <kbd>E</kbd> erase · <kbd>P</kbd> play<br>
-        In play: <kbd>←</kbd><kbd>→</kbd>/<kbd>A</kbd><kbd>D</kbd> run · <kbd>Space</kbd> jump
+        Keys <kbd>1</kbd>–<kbd>7</kbd> blocks · <kbd>M</kbd> move · <kbd>E</kbd> erase · <kbd>P</kbd> play<br>
+        Move tool: drag a box, then drag it · <kbd>Del</kbd> / <kbd>Esc</kbd> · arrows nudge<br>
+        In play: <kbd>←</kbd><kbd>→</kbd> run · <kbd>Space</kbd> jump · <kbd>↓</kbd> drop through
       </div>
     </aside>
   </main>
@@ -161,6 +162,7 @@
 /* ---- Tile model -----------------------------------------------------------
    0 empty · 1 ground (grass) · 2 wall (stone) · 3 slope ◢ · 4 slope ◣
    5 gentle-right-low · 6 gentle-right-high · 7 gentle-left-high · 8 gentle-left-low
+   9 one-way platform (jump up through it, land on top, press ↓ to drop through)
    A slope's walkable surface is a line across the cell: fraction 0 = cell top,
    1 = cell bottom. l/r are the fractions at the cell's left/right edge.        */
 const SLOPE = {
@@ -175,12 +177,13 @@ const THEME = {
   grass1:'#6fce57', grass2:'#3f9c36',
   stone1:'#9aa3b6', stone2:'#565f73',
   stoneCap:'#c3cad9',
+  plank1:'#e6b877', plank2:'#b07d3f', plankEdge:'rgba(45,28,10,0.55)',
   edge:'rgba(20,14,8,0.35)'
 };
 
 const CFG = {
   grav:2400, moveAccel:3200, maxRun:560, friction:2800,
-  jumpVel:820, maxFall:1700, coyote:0.09, jumpBuf:0.09
+  jumpVel:820, maxFall:1700, coyote:0.09, jumpBuf:0.09, dropTime:0.20
 };
 
 /* ---- pure helpers (serialized into export) -------------------------------- */
@@ -202,6 +205,26 @@ function drawTilesCore(ctx,level,T,theme,slopes){
     for(let c=0;c<cols;c++){
       const t=cells[r][c]; if(!t) continue;
       const x0=c*T, y0=r*T;
+      // one-way platform: a thin plank at the top of the cell (pass-through)
+      if(t===9){
+        const th=Math.max(4,T*0.30), pad=Math.max(1,T*0.05);
+        const px=x0+pad, pw=T-pad*2, py=y0+Math.max(1,T*0.06), rad=Math.min(5,th*0.45);
+        const gp=ctx.createLinearGradient(0,py,0,py+th);
+        gp.addColorStop(0,theme.plank1); gp.addColorStop(1,theme.plank2);
+        ctx.beginPath();
+        ctx.moveTo(px+rad,py);
+        ctx.arcTo(px+pw,py,px+pw,py+th,rad);
+        ctx.arcTo(px+pw,py+th,px,py+th,rad);
+        ctx.arcTo(px,py+th,px,py,rad);
+        ctx.arcTo(px,py,px+pw,py,rad);
+        ctx.closePath();
+        ctx.fillStyle=gp; ctx.fill();
+        ctx.fillStyle='rgba(255,255,255,0.35)';
+        ctx.fillRect(px+2,py+2,pw-4,Math.max(1,th*0.16));
+        ctx.strokeStyle=theme.plankEdge; ctx.lineWidth=Math.max(1,T*0.03);
+        ctx.stroke();
+        continue;
+      }
       const s=getSlope(slopes,t);
       const sl=y0+T*s.l, sr=y0+T*s.r;      // surface y at left / right edge
       const wall=(t===2);
@@ -333,6 +356,25 @@ function stepPlayer(level,p,input,T,cfg,slopes,dt){
     if(best!==null){ p.y=best-p.h; if(p.vy>0)p.vy=0; p.grounded=true; }
   }
 
+  // one-way platforms (type 9): catch the feet only when descending onto the
+  // top surface; press 'down' while standing to drop through for a moment
+  if(input.down && wasGrounded) p.dropThru=cfg.dropTime||0.20;
+  p.dropThru=Math.max(0,(p.dropThru||0)-dt);
+  if(p.dropThru<=0){
+    let c0=Math.floor(p.x/T), c1=Math.floor((p.x+p.w)/T);
+    const foot=p.y+p.h; let landY=null;
+    for(let c=c0;c<=c1;c++){
+      for(let r=0;r<rows;r++){
+        if(cellAt(c,r)!==9) continue;
+        const topY=r*T;
+        if(p.vy>=0 && prevFoot<=topY+1 && foot>=topY-1){
+          landY=(landY===null)?topY:Math.min(landY,topY);
+        }
+      }
+    }
+    if(landY!==null){ p.y=landY-p.h; if(p.vy>0)p.vy=0; p.grounded=true; }
+  }
+
   if(p.y<0){p.y=0; if(p.vy<0)p.vy=0;}
 
   // ---- jump (with coyote time + small input buffer)
@@ -377,6 +419,8 @@ function starterLevel(){
   // floating platforms to leap between
   for(let c=3;c<=6;c++) g[R-8][c]=1;
   for(let c=19;c<=23;c++) g[R-10][c]=1;
+  // a one-way platform: jump up through it, land on top, press down to drop
+  for(let c=10;c<=15;c++) g[R-7][c]=9;
   return g;
 }
 
@@ -384,13 +428,23 @@ function starterLevel(){
 const PALETTE=[
   {t:1, name:'Ground',        key:'1', kind:'paint'},
   {t:2, name:'Wall',          key:'2', kind:'paint'},
-  {t:3, name:'Slope ◢',       key:'3', kind:'paint'},
-  {t:4, name:'Slope ◣',       key:'4', kind:'paint'},
-  {t:5, name:'Ramp ◢ gentle', key:'5', kind:'ramp', pair:[5,6]},   // low + high, ascends right
-  {t:7, name:'Ramp ◣ gentle', key:'6', kind:'ramp', pair:[7,8]},   // high + low, ascends left
+  {t:9, name:'Platform',      key:'3', kind:'paint'},            // one-way / pass-through
+  {t:3, name:'Slope ◢',       key:'4', kind:'paint'},
+  {t:4, name:'Slope ◣',       key:'5', kind:'paint'},
+  {t:5, name:'Ramp ◢ gentle', key:'6', kind:'ramp', pair:[5,6]},   // low + high, ascends right
+  {t:7, name:'Ramp ◣ gentle', key:'7', kind:'ramp', pair:[7,8]},   // high + low, ascends left
+  {t:0, name:'Move / select', key:'M', kind:'select'},
   {t:0, name:'Eraser',        key:'E', kind:'erase'}
 ];
 let toolIndex=0;
+
+/* ---- selection / move-tool state ------------------------------------------ */
+let selection=null;   // {c0,r0,c1,r1} in cell coords, or null
+let selMode=null;     // 'marquee' | 'move' while a drag is in progress
+let selAnchor=null;   // marquee start cell
+let floatCells=null;  // lifted tiles while moving (2D array incl. zeros)
+let floatDim=null, floatPos=null, floatOrigin=null, moveStart=null;
+const clampi=(v,a,b)=>v<a?a:v>b?b:v;
 
 /* ---- canvas / geometry ---------------------------------------------------- */
 const cv=document.getElementById('c');
@@ -420,8 +474,36 @@ function render(){
   drawBackground(ctx,w,h,THEME);
   drawTilesCore(ctx,levelObj(),T,THEME,SLOPE);
   if(state.grid) drawGrid(w,h);
-  if(!state.playing && hover.c>=0) drawHover();
+  if(!state.playing){
+    if(PALETTE[toolIndex].kind==='select') drawSelection();
+    else if(hover.c>=0) drawHover();
+  }
   if(state.playing) drawPlayer();
+}
+function drawSelection(){
+  if(selMode==='move' && floatCells){
+    ctx.save();
+    ctx.translate(floatPos.c*T, floatPos.r*T); ctx.globalAlpha=0.9;
+    drawTilesCore(ctx,{cols:floatDim.w,rows:floatDim.h,cells:floatCells},T,THEME,SLOPE);
+    ctx.restore();
+    dashRect(floatPos.c*T,floatPos.r*T,floatDim.w*T,floatDim.h*T);
+    return;
+  }
+  if(selection){
+    ctx.save();
+    ctx.fillStyle='rgba(90,162,255,0.12)';
+    ctx.fillRect(selection.c0*T,selection.r0*T,(selection.c1-selection.c0+1)*T,(selection.r1-selection.r0+1)*T);
+    ctx.restore();
+    dashRect(selection.c0*T,selection.r0*T,(selection.c1-selection.c0+1)*T,(selection.r1-selection.r0+1)*T);
+  }
+}
+function dashRect(x,y,w,h){
+  ctx.save(); ctx.lineWidth=2;
+  ctx.setLineDash([6,4]); ctx.strokeStyle='rgba(8,12,20,0.85)';
+  ctx.strokeRect(x+1,y+1,w-2,h-2);
+  ctx.lineDashOffset=3; ctx.strokeStyle='#e6eeff';
+  ctx.strokeRect(x+1,y+1,w-2,h-2);
+  ctx.restore();
 }
 function drawGrid(w,h){
   ctx.strokeStyle='rgba(255,255,255,0.06)'; ctx.lineWidth=1;
@@ -488,22 +570,95 @@ function paintLine(a,b,erase){
 function onPointerDown(e){
   if(state.playing) return;
   e.preventDefault(); cv.setPointerCapture(e.pointerId);
+  const p=cellFromEvent(e);
+  hover.c=p.c; hover.r=p.r;
+  if(PALETTE[toolIndex].kind==='select'){ selDown(p); updateSelCursor(p); render(); return; }
   const erase=(e.button===2)|| (PALETTE[toolIndex].kind==='erase');
   paintMode=erase?2:1; painting=true;
-  const p=cellFromEvent(e); lastCell=null;
-  paintLine(lastCell,p,paintMode===2); lastCell=p;
-  hover.c=p.c; hover.r=p.r;
+  lastCell=null; paintLine(lastCell,p,paintMode===2); lastCell=p;
   render(); scheduleSave();
 }
 function onPointerMove(e){
   if(state.playing) return;
   const p=cellFromEvent(e);
   hover.c=p.c; hover.r=p.r;
+  if(PALETTE[toolIndex].kind==='select'){ selDrag(p); updateSelCursor(p); render(); return; }
   if(painting){ paintLine(lastCell,p,paintMode===2); lastCell=p; scheduleSave(); }
   render();
 }
-function onPointerUp(e){ painting=false; lastCell=null; }
-function onLeave(){ if(!painting){ hover.c=-1; hover.r=-1; render(); } }
+function onPointerUp(e){
+  if(PALETTE[toolIndex].kind==='select' && selMode){ selUp(); }
+  painting=false; lastCell=null;
+}
+function onLeave(){ if(!painting && !selMode){ hover.c=-1; hover.r=-1; render(); } }
+
+/* ---- selection / move tool ------------------------------------------------ */
+function inSel(p){ return selection && p.c>=selection.c0 && p.c<=selection.c1 && p.r>=selection.r0 && p.r<=selection.r1; }
+function updateSelCursor(p){ cv.style.cursor = inSel(p) ? 'move' : 'crosshair'; }
+function selDown(p){
+  if(inSel(p)){
+    selMode='move';
+    floatDim={w:selection.c1-selection.c0+1,h:selection.r1-selection.r0+1};
+    floatCells=[];
+    for(let r=0;r<floatDim.h;r++){ const row=[];
+      for(let c=0;c<floatDim.w;c++){ const t=state.cells[selection.r0+r][selection.c0+c];
+        row.push(t); if(t) state.cells[selection.r0+r][selection.c0+c]=0; }
+      floatCells.push(row);
+    }
+    floatOrigin={c:selection.c0,r:selection.r0};
+    floatPos={c:selection.c0,r:selection.r0};
+    moveStart={c:p.c,r:p.r};
+  }else{
+    selMode='marquee';
+    const c=clampi(p.c,0,state.cols-1), r=clampi(p.r,0,state.rows-1);
+    selAnchor={c,r}; selection={c0:c,r0:r,c1:c,r1:r};
+  }
+}
+function selDrag(p){
+  if(selMode==='marquee'){
+    const c=clampi(p.c,0,state.cols-1), r=clampi(p.r,0,state.rows-1);
+    selection={c0:Math.min(selAnchor.c,c),r0:Math.min(selAnchor.r,r),
+               c1:Math.max(selAnchor.c,c),r1:Math.max(selAnchor.r,r)};
+  }else if(selMode==='move'){
+    const dc=p.c-moveStart.c, dr=p.r-moveStart.r;
+    floatPos={c:clampi(floatOrigin.c+dc,0,state.cols-floatDim.w),
+              r:clampi(floatOrigin.r+dr,0,state.rows-floatDim.h)};
+  }
+}
+function selUp(){
+  if(selMode==='marquee'){
+    let any=false;
+    for(let r=selection.r0;r<=selection.r1&&!any;r++)
+      for(let c=selection.c0;c<=selection.c1;c++){ if(state.cells[r][c]){ any=true; break; } }
+    if(!any) selection=null;            // clicking empty space deselects
+  }else if(selMode==='move'){
+    for(let r=0;r<floatDim.h;r++) for(let c=0;c<floatDim.w;c++){
+      const t=floatCells[r][c]; if(t) state.cells[floatPos.r+r][floatPos.c+c]=t;
+    }
+    selection={c0:floatPos.c,r0:floatPos.r,c1:floatPos.c+floatDim.w-1,r1:floatPos.r+floatDim.h-1};
+    floatCells=null; floatPos=null; scheduleSave();
+  }
+  selMode=null; render();
+}
+function clearSelectionTiles(){
+  if(!selection) return;
+  for(let r=selection.r0;r<=selection.r1;r++)
+    for(let c=selection.c0;c<=selection.c1;c++) state.cells[r][c]=0;
+  render(); scheduleSave();
+}
+function nudgeSelection(dc,dr){
+  if(!selection) return;
+  const w=selection.c1-selection.c0+1, h=selection.r1-selection.r0+1;
+  const nc0=clampi(selection.c0+dc,0,state.cols-w), nr0=clampi(selection.r0+dr,0,state.rows-h);
+  if(nc0===selection.c0 && nr0===selection.r0) return;
+  const block=[];
+  for(let r=0;r<h;r++){ block.push([]); for(let c=0;c<w;c++) block[r][c]=state.cells[selection.r0+r][selection.c0+c]; }
+  for(let r=0;r<h;r++) for(let c=0;c<w;c++){ if(block[r][c]) state.cells[selection.r0+r][selection.c0+c]=0; }
+  for(let r=0;r<h;r++) for(let c=0;c<w;c++){ if(block[r][c]) state.cells[nr0+r][nc0+c]=block[r][c]; }
+  selection={c0:nc0,r0:nr0,c1:nc0+w-1,r1:nr0+h-1};
+  render(); scheduleSave();
+}
+function clearSelection(){ selection=null; selMode=null; floatCells=null; }
 
 cv.addEventListener('pointerdown',onPointerDown);
 cv.addEventListener('pointermove',onPointerMove);
@@ -542,6 +697,19 @@ function drawSwatch(sc,item,ts,w,h,cols){
     sc.beginPath(); sc.moveTo(9,9); sc.lineTo(w-9,h-9); sc.stroke();
     return;
   }
+  if(item.kind==='select'){
+    sc.setLineDash([5,3]); sc.lineWidth=2; sc.strokeStyle='#cfe0ff';
+    sc.strokeRect(5,5,w-10,h-10); sc.setLineDash([]);
+    const cx=w/2, cy=h/2, a=7;                         // 4-way move arrows
+    sc.strokeStyle='#eaf2ff'; sc.lineWidth=2; sc.beginPath();
+    sc.moveTo(cx-a,cy); sc.lineTo(cx+a,cy); sc.moveTo(cx,cy-a); sc.lineTo(cx,cy+a);
+    sc.moveTo(cx-a,cy); sc.lineTo(cx-a+3,cy-3); sc.moveTo(cx-a,cy); sc.lineTo(cx-a+3,cy+3);
+    sc.moveTo(cx+a,cy); sc.lineTo(cx+a-3,cy-3); sc.moveTo(cx+a,cy); sc.lineTo(cx+a-3,cy+3);
+    sc.moveTo(cx,cy-a); sc.lineTo(cx-3,cy-a+3); sc.moveTo(cx,cy-a); sc.lineTo(cx+3,cy-a+3);
+    sc.moveTo(cx,cy+a); sc.lineTo(cx-3,cy+a-3); sc.moveTo(cx,cy+a); sc.lineTo(cx+3,cy+a-3);
+    sc.stroke();
+    return;
+  }
   const rows=1; const cells=[[]];
   if(item.kind==='ramp'){ cells[0]=[item.pair[0],item.pair[1]]; }
   else cells[0]=[item.t];
@@ -552,9 +720,19 @@ function drawSwatch(sc,item,ts,w,h,cols){
 }
 function selectTool(i){
   toolIndex=i;
+  const kind=PALETTE[i].kind;
+  if(kind!=='select') clearSelection();
+  cv.style.cursor='crosshair';
   [...paletteEl.children].forEach((el,idx)=>el.classList.toggle('sel',idx===i));
   document.getElementById('hudTool').textContent=PALETTE[i].name;
+  const hint=document.getElementById('hudHint');
+  hint.textContent = kind==='select'
+      ? 'selected · drag a box to select, then drag it to move · Del removes · Esc clears'
+      : kind==='erase'
+      ? 'selected · drag to erase blocks'
+      : 'selected · left-drag to paint · right-drag to erase';
   state.tile=PALETTE[i].t;
+  if(!state.playing) render();
 }
 
 /* ============================ Size controls =============================== */
@@ -571,6 +749,7 @@ function resize(dcols,drows){
     }
   }
   state.cols=nc; state.rows=nr; state.cells=g;
+  clearSelection();
   updateSizeLabels(); sizeCanvas(); render(); scheduleSave();
 }
 function updateSizeLabels(){
@@ -585,7 +764,7 @@ document.getElementById('hMinus').onclick=()=>resize(0,-2);
 /* ============================ Toolbar actions ============================= */
 document.getElementById('clearBtn').onclick=()=>{
   if(!confirm('Clear the whole arena?')) return;
-  state.cells=blankGrid(state.cols,state.rows); render(); scheduleSave();
+  state.cells=blankGrid(state.cols,state.rows); clearSelection(); render(); scheduleSave();
 };
 document.getElementById('gridBtn').onclick=()=>{
   state.grid=!state.grid;
@@ -603,6 +782,14 @@ window.addEventListener('keydown',e=>{
   if(state.playing){
     if(k==='p'||k==='escape'){ stopPlay(); e.preventDefault(); }
     return;
+  }
+  if(PALETTE[toolIndex].kind==='select' && selection && !selMode){
+    if(k==='delete'||k==='backspace'){ clearSelectionTiles(); e.preventDefault(); return; }
+    if(k==='escape'){ selection=null; render(); e.preventDefault(); return; }
+    if(k==='arrowleft'){ nudgeSelection(-1,0); e.preventDefault(); return; }
+    if(k==='arrowright'){ nudgeSelection(1,0); e.preventDefault(); return; }
+    if(k==='arrowup'){ nudgeSelection(0,-1); e.preventDefault(); return; }
+    if(k==='arrowdown'){ nudgeSelection(0,1); e.preventDefault(); return; }
   }
   const idx=PALETTE.findIndex(p=>p.key.toLowerCase()===k);
   if(idx>=0){ selectTool(idx); e.preventDefault(); return; }
@@ -670,9 +857,9 @@ const EXPORT_TEMPLATE=`<!DOCTYPE html>
  @media(hover:hover){#pad{display:none}}
 </style></head><body>
 <div id="stage"><canvas id="game"></canvas></div>
-<div id="hint">▲ <b>__TITLE__</b> — <b>←→</b>/<b>A D</b> run · <b>Space</b>/<b>W</b> jump · <b>R</b> reset</div>
+<div id="hint">▲ <b>__TITLE__</b> — <b>←→</b> run · <b>Space</b> jump · <b>↓</b> drop · <b>R</b> reset</div>
 <div id="pad">
-  <div class="pad-l"><div class="btn" data-k="left">◀</div><div class="btn" data-k="right">▶</div></div>
+  <div class="pad-l"><div class="btn" data-k="left">◀</div><div class="btn" data-k="right">▶</div><div class="btn" data-k="down">▼</div></div>
   <div class="pad-r"><div class="btn" data-k="jump">⤒</div></div>
 </div>
 <script>
@@ -701,9 +888,9 @@ const EXPORT_TEMPLATE=`<!DOCTYPE html>
             grounded:false,facing:1,coyote:0,jbuf:0,dead:false};
   }
   let p=spawn();
-  const input={left:false,right:false,jump:false};
+  const input={left:false,right:false,jump:false,down:false};
   const keymap={arrowleft:'left',a:'left',arrowright:'right',d:'right',
-    ' ':'jump',arrowup:'jump',w:'jump'};
+    ' ':'jump',arrowup:'jump',w:'jump',arrowdown:'down',s:'down'};
   addEventListener('keydown',e=>{
     const k=e.key.toLowerCase();
     if(k==='r'){ p=spawn(); e.preventDefault(); return; }
@@ -775,6 +962,7 @@ function loadFromText(text,fname){
     if(!lvl||!Array.isArray(lvl.cells)) throw new Error('no level data found');
     state.cols=lvl.cols; state.rows=lvl.rows; state.cells=lvl.cells;
     if(data.name) nameEl.value=data.name;
+    clearSelection();
     updateSizeLabels(); sizeCanvas(); render(); scheduleSave();
   }catch(err){ alert('Could not import this file:\n'+err.message); }
 }
@@ -810,9 +998,9 @@ function tryLoad(){
 
 /* ============================ Playtest ==================================== */
 let player=null, rafId=0, lastTs=0;
-const playInput={left:false,right:false,jump:false};
+const playInput={left:false,right:false,jump:false,down:false};
 const playKeymap={arrowleft:'left',a:'left',arrowright:'right',d:'right',
-  ' ':'jump',arrowup:'jump',w:'jump'};
+  ' ':'jump',arrowup:'jump',w:'jump',arrowdown:'down',s:'down'};
 function playerSpawn(){
   let sc=Math.max(1,Math.floor(state.cols*0.15)), sr=state.rows;
   for(let r=0;r<state.rows;r++){ if(state.cells[r][sc]){ sr=r; break; } }
@@ -820,7 +1008,8 @@ function playerSpawn(){
           grounded:false,facing:1,coyote:0,jbuf:0,dead:false};
 }
 function startPlay(){
-  state.playing=true; player=playerSpawn();
+  state.playing=true; player=playerSpawn(); clearSelection();
+  playInput.left=playInput.right=playInput.jump=playInput.down=false;
   document.body.classList.add('playing');
   document.getElementById('modeBadge').textContent='Playing';
   document.getElementById('modeBadge').classList.add('on');
@@ -829,7 +1018,7 @@ function startPlay(){
   document.getElementById('hudTool').textContent='Playtest';
   const hp=document.getElementById('hudPlay');
   hp.style.display='block';
-  hp.innerHTML='<b>← →</b> / <b>A D</b> run &nbsp;·&nbsp; <b>Space</b> jump &nbsp;·&nbsp; <b>P</b> to stop';
+  hp.innerHTML='<b>← →</b> run &nbsp;·&nbsp; <b>Space</b> jump &nbsp;·&nbsp; <b>↓</b> drop through &nbsp;·&nbsp; <b>P</b> to stop';
   hover.c=-1;
   window.addEventListener('keydown',playKeyDown);
   window.addEventListener('keyup',playKeyUp);
