@@ -96,17 +96,16 @@
     </div>
 
     <div class="group">
-      <label>Width</label>
-      <button class="icon" id="wMinus" title="Narrower">−</button>
+      <label>Size</label>
+      <button class="icon" id="wMinus" title="Smaller (stays 16:9)">−</button>
       <span class="sz" id="wVal">0</span>
-      <button class="icon" id="wPlus" title="Wider">＋</button>
-    </div>
-    <div class="group">
-      <label>Height</label>
-      <button class="icon" id="hMinus" title="Shorter">−</button>
+      <span class="dim" style="opacity:.6">×</span>
       <span class="sz" id="hVal">0</span>
-      <button class="icon" id="hPlus" title="Taller">＋</button>
+      <button class="icon" id="wPlus" title="Bigger (stays 16:9)">＋</button>
     </div>
+    <span class="badge" title="Width and height are locked to a 16:9 ratio">🔒 16:9</span>
+    <button id="hMinus" style="display:none"></button>
+    <button id="hPlus" style="display:none"></button>
 
     <div class="spacer"></div>
 
@@ -138,7 +137,7 @@
         </div>
         Keys <kbd>1</kbd>–<kbd>7</kbd> blocks · <kbd>M</kbd> move · <kbd>E</kbd> erase · <kbd>P</kbd> play<br>
         Move tool: drag a box, then drag it · <kbd>Del</kbd> / <kbd>Esc</kbd> · arrows nudge<br>
-        In play: <kbd>←</kbd><kbd>→</kbd> run · <kbd>Space</kbd> jump · <kbd>↓</kbd> drop through
+        In play: <kbd>←</kbd><kbd>→</kbd> run · <kbd>Space</kbd> jump ×2 · <kbd>↓</kbd> drop through
       </div>
     </aside>
   </main>
@@ -183,7 +182,8 @@ const THEME = {
 
 const CFG = {
   grav:2400, moveAccel:3200, maxRun:560, friction:2800,
-  jumpVel:820, maxFall:1700, coyote:0.09, jumpBuf:0.09, dropTime:0.20
+  jumpVel:820, maxFall:1700, coyote:0.09, jumpBuf:0.09, dropTime:0.20,
+  maxJumps:2, airJumpScale:0.92
 };
 
 /* ---- pure helpers (serialized into export) -------------------------------- */
@@ -377,10 +377,20 @@ function stepPlayer(level,p,input,T,cfg,slopes,dt){
 
   if(p.y<0){p.y=0; if(p.vy<0)p.vy=0;}
 
-  // ---- jump (with coyote time + small input buffer)
+  // ---- jump: a grounded/coyote jump plus extra mid-air jumps (double jump).
+  //      Air jumps require a fresh key press (rising edge) so holding jump
+  //      doesn't spend them instantly, and landing resets the count.
+  if(p.grounded) p.jumps=0; else p.jumps=p.jumps||0;
+  const pressed = input.jump && !p.jumpHeld;   // rising edge this tick
+  p.jumpHeld = input.jump;
+  if(pressed) p.jbuf=cfg.jumpBuf; else p.jbuf=Math.max(0,(p.jbuf||0)-dt);
   p.coyote = p.grounded? cfg.coyote : Math.max(0,p.coyote-dt);
-  p.jbuf = input.jump? cfg.jumpBuf : Math.max(0,(p.jbuf||0)-dt);
-  if(p.jbuf>0 && p.coyote>0){ p.vy=-cfg.jumpVel; p.grounded=false; p.coyote=0; p.jbuf=0; }
+  const maxJ = cfg.maxJumps||2;
+  if(p.jbuf>0 && p.coyote>0 && p.jumps<1){        // first jump off the ground
+    p.vy=-cfg.jumpVel; p.grounded=false; p.coyote=0; p.jbuf=0; p.jumps=1;
+  } else if(pressed && !p.grounded && p.jumps<maxJ){ // extra mid-air jump
+    p.vy=-cfg.jumpVel*(cfg.airJumpScale||0.9); p.jbuf=0; p.jumps=Math.max(p.jumps,1)+1;
+  }
   // variable jump height: cut when the button is released early
   if(!input.jump && p.vy<-cfg.jumpVel*0.35) p.vy=-cfg.jumpVel*0.35;
 
@@ -393,7 +403,7 @@ function stepPlayer(level,p,input,T,cfg,slopes,dt){
 /* ============================ Editor state ================================= */
 const AUTOSAVE='pf_level_designer_v1';
 const state={
-  cols:28, rows:16, tile:1, grid:true, playing:false,
+  cols:32, rows:18, tile:1, grid:true, playing:false,   // 32×18 = 16:9
   cells:null
 };
 function blankGrid(cols,rows){
@@ -736,18 +746,19 @@ function selectTool(i){
 }
 
 /* ============================ Size controls =============================== */
-const MINW=8,MAXW=64,MINH=6,MAXH=40;
-function resize(dcols,drows){
-  const nc=Math.max(MINW,Math.min(MAXW,state.cols+dcols));
-  const nr=Math.max(MINH,Math.min(MAXH,state.rows+drows));
-  if(nc===state.cols&&nr===state.rows) return;
+// The arena is locked to a 16:9 shape: cols = 16·u, rows = 9·u. Growing either
+// dimension grows both, so width and height stay in step at a 16:9 ratio.
+const MINU=1, MAXU=5;   // 16×9 … 80×45
+function currentUnit(){ return Math.max(MINU,Math.min(MAXU,Math.round(state.cols/16))); }
+function changeSize(d){
+  const nu=Math.max(MINU,Math.min(MAXU,currentUnit()+d));
+  const nc=16*nu, nr=9*nu;
+  if(nc===state.cols && nr===state.rows) return;
   const g=blankGrid(nc,nr);
   // anchor content to the bottom-left so the ground line stays put
-  for(let r=0;r<Math.min(nr,state.rows);r++){
-    for(let c=0;c<Math.min(nc,state.cols);c++){
+  for(let r=0;r<Math.min(nr,state.rows);r++)
+    for(let c=0;c<Math.min(nc,state.cols);c++)
       g[nr-1-r][c]=state.cells[state.rows-1-r][c];
-    }
-  }
   state.cols=nc; state.rows=nr; state.cells=g;
   clearSelection();
   updateSizeLabels(); sizeCanvas(); render(); scheduleSave();
@@ -756,10 +767,11 @@ function updateSizeLabels(){
   document.getElementById('wVal').textContent=state.cols;
   document.getElementById('hVal').textContent=state.rows;
 }
-document.getElementById('wPlus').onclick =()=>resize(+2,0);
-document.getElementById('wMinus').onclick=()=>resize(-2,0);
-document.getElementById('hPlus').onclick =()=>resize(0,+2);
-document.getElementById('hMinus').onclick=()=>resize(0,-2);
+// both width and height controls drive the same 16:9 step
+document.getElementById('wPlus').onclick =()=>changeSize(+1);
+document.getElementById('wMinus').onclick=()=>changeSize(-1);
+document.getElementById('hPlus').onclick =()=>changeSize(+1);
+document.getElementById('hMinus').onclick=()=>changeSize(-1);
 
 /* ============================ Toolbar actions ============================= */
 document.getElementById('clearBtn').onclick=()=>{
@@ -857,7 +869,7 @@ const EXPORT_TEMPLATE=`<!DOCTYPE html>
  @media(hover:hover){#pad{display:none}}
 </style></head><body>
 <div id="stage"><canvas id="game"></canvas></div>
-<div id="hint">▲ <b>__TITLE__</b> — <b>←→</b> run · <b>Space</b> jump · <b>↓</b> drop · <b>R</b> reset</div>
+<div id="hint">▲ <b>__TITLE__</b> — <b>←→</b> run · <b>Space</b> jump ×2 · <b>↓</b> drop · <b>R</b> reset</div>
 <div id="pad">
   <div class="pad-l"><div class="btn" data-k="left">◀</div><div class="btn" data-k="right">▶</div><div class="btn" data-k="down">▼</div></div>
   <div class="pad-r"><div class="btn" data-k="jump">⤒</div></div>
@@ -885,7 +897,7 @@ const EXPORT_TEMPLATE=`<!DOCTYPE html>
     let sc=Math.max(1,Math.floor(cols*0.15)), sr=0;
     for(let r=0;r<rows;r++){ if(L.cells[r][sc]){ sr=r; break; } if(r===rows-1) sr=rows; }
     return {x:sc*T+T*0.2,y:(sr-2)*T,w:T*0.55,h:T*0.9,vx:0,vy:0,
-            grounded:false,facing:1,coyote:0,jbuf:0,dead:false};
+            grounded:false,facing:1,coyote:0,jbuf:0,jumps:0,jumpHeld:false,dropThru:0,dead:false};
   }
   let p=spawn();
   const input={left:false,right:false,jump:false,down:false};
@@ -1005,7 +1017,7 @@ function playerSpawn(){
   let sc=Math.max(1,Math.floor(state.cols*0.15)), sr=state.rows;
   for(let r=0;r<state.rows;r++){ if(state.cells[r][sc]){ sr=r; break; } }
   return {x:sc*T+T*0.2,y:(sr-2)*T,w:T*0.55,h:T*0.9,vx:0,vy:0,
-          grounded:false,facing:1,coyote:0,jbuf:0,dead:false};
+          grounded:false,facing:1,coyote:0,jbuf:0,jumps:0,jumpHeld:false,dropThru:0,dead:false};
 }
 function startPlay(){
   state.playing=true; player=playerSpawn(); clearSelection();
@@ -1018,7 +1030,7 @@ function startPlay(){
   document.getElementById('hudTool').textContent='Playtest';
   const hp=document.getElementById('hudPlay');
   hp.style.display='block';
-  hp.innerHTML='<b>← →</b> run &nbsp;·&nbsp; <b>Space</b> jump &nbsp;·&nbsp; <b>↓</b> drop through &nbsp;·&nbsp; <b>P</b> to stop';
+  hp.innerHTML='<b>← →</b> run &nbsp;·&nbsp; <b>Space</b> jump &amp; double-jump &nbsp;·&nbsp; <b>↓</b> drop through &nbsp;·&nbsp; <b>P</b> to stop';
   hover.c=-1;
   window.addEventListener('keydown',playKeyDown);
   window.addEventListener('keyup',playKeyUp);
